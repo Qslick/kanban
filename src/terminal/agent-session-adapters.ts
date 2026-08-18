@@ -143,6 +143,22 @@ function applyCliOptionOverride(
 	args.push(flags[0], value);
 }
 
+function stripCliOptions(args: string[], optionNames: readonly string[]): string[] {
+	const stripped: string[] = [];
+	for (let i = 0; i < args.length; i += 1) {
+		const arg = args[i];
+		const matchedOption = optionNames.find((optionName) => arg === optionName || arg.startsWith(`${optionName}=`));
+		if (!matchedOption) {
+			stripped.push(arg);
+			continue;
+		}
+		if (arg === matchedOption && i + 1 < args.length && !args[i + 1].startsWith("-")) {
+			i += 1;
+		}
+	}
+	return stripped;
+}
+
 function getClineHookScriptPath(
 	hooksDir: string,
 	hookName: "Notification" | "TaskComplete" | "UserPromptSubmit" | "PreToolUse" | "PostToolUse",
@@ -1432,6 +1448,199 @@ const kiroAdapter: AgentSessionAdapter = {
 	},
 };
 
+const grokAdapter: AgentSessionAdapter = {
+	async prepare(input) {
+		let args = stripCliOptions([...input.args], ["--worktree", "-w", "--system-prompt-override"]);
+		const env: Record<string, string | undefined> = {};
+
+		if (input.startInPlanMode) {
+			args = stripCliOptions(args, ["--permission-mode", "--always-approve", "--yolo"]);
+			args.push("--permission-mode", "plan");
+		} else if (
+			input.autonomousModeEnabled &&
+			!hasCliOption(args, "--permission-mode") &&
+			!hasCliOption(args, "--always-approve") &&
+			!hasCliOption(args, "--yolo")
+		) {
+			args.push("--permission-mode", "auto");
+		}
+
+		if (
+			input.resumeFromTrash &&
+			!hasCliOption(args, "--continue") &&
+			!hasCliOption(args, "-c") &&
+			!hasCliOption(args, "--resume") &&
+			!hasCliOption(args, "-r")
+		) {
+			args.push("--continue");
+		}
+
+		if (!hasCliOption(args, "--trust")) {
+			args.push("--trust");
+		}
+
+		const hooks = resolveHookContext(input);
+		if (hooks) {
+			const hooksPath = join(input.cwd, ".grok", "hooks", "kanban.json");
+			const hooksSettings = {
+				hooks: {
+					UserPromptSubmit: [
+						{
+							hooks: [
+								{
+									type: "command",
+									command: buildHookCommand("to_in_progress", {
+										source: "grok",
+										hookEventName: "UserPromptSubmit",
+									}),
+								},
+							],
+						},
+					],
+					PreToolUse: [
+						{
+							matcher: "*",
+							hooks: [
+								{
+									type: "command",
+									command: buildHookCommand("activity", {
+										source: "grok",
+										hookEventName: "PreToolUse",
+									}),
+								},
+							],
+						},
+					],
+					PostToolUse: [
+						{
+							matcher: "*",
+							hooks: [
+								{
+									type: "command",
+									command: buildHookCommand("to_in_progress", {
+										source: "grok",
+										hookEventName: "PostToolUse",
+									}),
+								},
+							],
+						},
+					],
+					PostToolUseFailure: [
+						{
+							matcher: "*",
+							hooks: [
+								{
+									type: "command",
+									command: buildHookCommand("to_in_progress", {
+										source: "grok",
+										hookEventName: "PostToolUseFailure",
+									}),
+								},
+							],
+						},
+					],
+					Stop: [
+						{
+							hooks: [
+								{
+									type: "command",
+									command: buildHookCommand("to_review", {
+										source: "grok",
+										hookEventName: "Stop",
+										activityText: "Waiting for review",
+									}),
+								},
+							],
+						},
+					],
+					StopCancelled: [
+						{
+							hooks: [
+								{
+									type: "command",
+									command: buildHookCommand("activity", {
+										source: "grok",
+										hookEventName: "StopCancelled",
+									}),
+								},
+							],
+						},
+					],
+					Notification: [
+						{
+							matcher: "permission_prompt",
+							hooks: [
+								{
+									type: "command",
+									command: buildHookCommand("to_review", {
+										source: "grok",
+										notificationType: "permission_prompt",
+									}),
+								},
+							],
+						},
+						{
+							matcher: "idle_prompt",
+							hooks: [
+								{
+									type: "command",
+									command: buildHookCommand("to_review", {
+										source: "grok",
+										notificationType: "idle_prompt",
+									}),
+								},
+							],
+						},
+						{
+							matcher: "*",
+							hooks: [
+								{
+									type: "command",
+									command: buildHookCommand("activity", {
+										source: "grok",
+										hookEventName: "Notification",
+									}),
+								},
+							],
+						},
+					],
+				},
+			};
+			await ensureTextFile(hooksPath, JSON.stringify(hooksSettings, null, 2));
+			Object.assign(
+				env,
+				createHookRuntimeEnv({
+					taskId: hooks.taskId,
+					workspaceId: hooks.workspaceId,
+				}),
+			);
+		}
+
+		const appendedSystemPrompt = resolveHomeAgentAppendSystemPrompt(input.taskId);
+		if (appendedSystemPrompt && !hasCliOption(args, "--rules")) {
+			args.push("--rules", appendedSystemPrompt);
+		}
+
+		// Per-task model/effort overrides, passed verbatim. Grok accepts --model/-m
+		// and --reasoning-effort/--effort. User/workspace args win.
+		applyCliOptionOverride(args, input.agentSettings?.modelId, ["--model", "-m"]);
+		applyCliOptionOverride(args, input.agentSettings?.reasoningEffort, ["--reasoning-effort", "--effort"]);
+
+		if (input.prompt.trim() && !hasCliOption(args, "--verbatim")) {
+			args.push("--verbatim");
+		}
+
+		const withPromptLaunch = withPrompt(args, input.prompt, "append");
+		return {
+			...withPromptLaunch,
+			env: {
+				...withPromptLaunch.env,
+				...env,
+			},
+		};
+	},
+};
+
 const clineAdapter: AgentSessionAdapter = {
 	async prepare(input) {
 		const args = [...input.args];
@@ -1496,6 +1705,7 @@ const ADAPTERS: Record<RuntimeAgentId, AgentSessionAdapter> = {
 	opencode: opencodeAdapter,
 	droid: droidAdapter,
 	kiro: kiroAdapter,
+	grok: grokAdapter,
 	cline: clineAdapter,
 };
 

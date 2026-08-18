@@ -168,4 +168,17 @@ describe("resolveHomeAgentAppendSystemPrompt", () => {
 		expect(prompt).toContain("kiro-cli mcp add --name linear --url https://mcp.linear.app/mcp --scope global");
 		expect(prompt).not.toContain("--scope user");
 	});
+
+	it("returns active-agent guidance for grok home sidebar sessions", () => {
+		const prompt = resolveHomeAgentAppendSystemPrompt("__home_agent__:workspace-1:grok", {
+			currentVersion: "0.1.10",
+			cwd: "/Users/example/repo",
+			execPath: "/usr/local/bin/node",
+			execArgv: [],
+			argv: ["node", "/Users/example/repo/dist/cli.js"],
+			resolveRealPath: (path) => path,
+		});
+		expect(prompt).toContain("Current home agent: `grok`");
+		expect(prompt).toContain("grok mcp add --transport http --scope user linear https://mcp.linear.app/mcp");
+	});
 });

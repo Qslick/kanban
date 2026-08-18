@@ -595,6 +595,18 @@ describe("prepareAgentLaunch hook strategies", () => {
 		});
 		expect(kiroLaunch.args).toContain("--resume");
 
+		const grokLaunch = await prepareAgentLaunch({
+			taskId: "task-grok",
+			agentId: "grok",
+			binary: "grok",
+			args: [],
+			cwd: "/tmp",
+			prompt: "",
+			resumeFromTrash: true,
+		});
+		expect(grokLaunch.args).toContain("--continue");
+		expect(grokLaunch.args).not.toContain("--resume");
+
 		const clineLaunch = await prepareAgentLaunch({
 			taskId: "task-cline",
 			agentId: "cline",
@@ -687,6 +699,21 @@ describe("prepareAgentLaunch hook strategies", () => {
 			prompt: "",
 		});
 		expect(kiroLaunch.args).toContain("--trust-all-tools");
+
+		const grokLaunch = await prepareAgentLaunch({
+			taskId: "task-grok-auto",
+			agentId: "grok",
+			binary: "grok",
+			args: [],
+			autonomousModeEnabled: true,
+			cwd: "/tmp",
+			prompt: "",
+		});
+		const grokPermissionModeIndex = grokLaunch.args.indexOf("--permission-mode");
+		expect(grokPermissionModeIndex).toBeGreaterThan(-1);
+		expect(grokLaunch.args[grokPermissionModeIndex + 1]).toBe("auto");
+		expect(grokLaunch.args).not.toContain("--always-approve");
+		expect(grokLaunch.args).not.toContain("--yolo");
 
 		const clineLaunch = await prepareAgentLaunch({
 			taskId: "task-cline-auto",
@@ -811,6 +838,81 @@ describe("prepareAgentLaunch hook strategies", () => {
 		});
 		expect(kiroLaunch.args).toContain("--trust-all-tools");
 	});
+
+	it("writes Grok project hooks and launches with trust, rules, and no nested worktree", async () => {
+		const home = setupTempHome();
+		setKanbanProcessContext();
+		const cwd = join(home, "worktree");
+		mkdirSync(cwd, { recursive: true });
+
+		const launch = await prepareAgentLaunch({
+			taskId: "__home_agent__:workspace-1:grok",
+			agentId: "grok",
+			binary: "grok",
+			args: ["--worktree", "/tmp/nested", "--system-prompt-override", "wipe"],
+			autonomousModeEnabled: true,
+			cwd,
+			prompt: "Fix the flaky test",
+			workspaceId: "workspace-1",
+		});
+
+		expect(launch.env.KANBAN_HOOK_TASK_ID).toBe("__home_agent__:workspace-1:grok");
+		expect(launch.env.KANBAN_HOOK_WORKSPACE_ID).toBe("workspace-1");
+		expect(launch.args).toContain("--trust");
+		expect(launch.args).toContain("--verbatim");
+		expect(launch.args).toContain("Fix the flaky test");
+		expect(launch.args).not.toContain("--worktree");
+		expect(launch.args).not.toContain("/tmp/nested");
+		expect(launch.args).not.toContain("--system-prompt-override");
+		expect(launch.args).not.toContain("wipe");
+
+		const permissionModeIndex = launch.args.indexOf("--permission-mode");
+		expect(launch.args[permissionModeIndex + 1]).toBe("auto");
+
+		const rulesIndex = launch.args.indexOf("--rules");
+		expect(rulesIndex).toBeGreaterThan(-1);
+		expect(launch.args[rulesIndex + 1]).toContain("Kanban sidebar agent");
+		expect(launch.args[rulesIndex + 1]).toContain(
+			"grok mcp add --transport http --scope user linear https://mcp.linear.app/mcp",
+		);
+
+		const hooksPath = join(cwd, ".grok", "hooks", "kanban.json");
+		const hooks = JSON.parse(readFileSync(hooksPath, "utf8")) as {
+			hooks?: Record<string, Array<{ matcher?: string; hooks?: Array<{ command?: string }> }>>;
+		};
+		expect(hooks.hooks?.UserPromptSubmit?.[0]?.hooks?.[0]?.command).toContain("to_in_progress");
+		expect(hooks.hooks?.UserPromptSubmit?.[0]?.hooks?.[0]?.command).toContain("--source");
+		expect(hooks.hooks?.UserPromptSubmit?.[0]?.hooks?.[0]?.command).toContain("grok");
+		expect(hooks.hooks?.PreToolUse?.[0]?.matcher).toBe("*");
+		expect(hooks.hooks?.PreToolUse?.[0]?.hooks?.[0]?.command).toContain("activity");
+		expect(hooks.hooks?.PostToolUse?.[0]?.hooks?.[0]?.command).toContain("to_in_progress");
+		expect(hooks.hooks?.PostToolUseFailure?.[0]?.hooks?.[0]?.command).toContain("to_in_progress");
+		expect(hooks.hooks?.Stop?.[0]?.hooks?.[0]?.command).toContain("to_review");
+		expect(hooks.hooks?.Stop?.[0]?.hooks?.[0]?.command).toContain("Waiting for review");
+		expect(hooks.hooks?.StopCancelled?.[0]?.hooks?.[0]?.command).toContain("activity");
+		const permissionNotification = hooks.hooks?.Notification?.find((hook) => hook.matcher === "permission_prompt");
+		expect(permissionNotification?.hooks?.[0]?.command).toContain("to_review");
+		const idleNotification = hooks.hooks?.Notification?.find((hook) => hook.matcher === "idle_prompt");
+		expect(idleNotification?.hooks?.[0]?.command).toContain("to_review");
+	});
+
+	it("starts Grok plan mode without auto or always-approve flags", async () => {
+		setupTempHome();
+		const launch = await prepareAgentLaunch({
+			taskId: "task-grok-plan",
+			agentId: "grok",
+			binary: "grok",
+			args: ["--always-approve", "--permission-mode", "auto"],
+			autonomousModeEnabled: true,
+			cwd: "/tmp",
+			prompt: "Plan the migration",
+			startInPlanMode: true,
+		});
+		expect(launch.args).not.toContain("--always-approve");
+		expect(launch.args).not.toContain("--yolo");
+		expect(launch.args.filter((arg) => arg === "--permission-mode")).toHaveLength(1);
+		expect(launch.args[launch.args.indexOf("--permission-mode") + 1]).toBe("plan");
+	});
 });
 
 describe("per-task agentSettings overrides", () => {
@@ -912,6 +1014,46 @@ describe("per-task agentSettings overrides", () => {
 		expect(effortIndex).toBeGreaterThan(-1);
 		expect(launch.args[effortIndex + 1]).toBe(SENTINEL.reasoningEffort);
 		expect(launch.args).not.toContain("-r");
+	});
+
+	it("grok: passes model/effort verbatim as --model/--reasoning-effort", async () => {
+		setupTempHome();
+		const launch = await prepareAgentLaunch({
+			taskId: "task-1",
+			agentId: "grok",
+			binary: "grok",
+			args: [],
+			cwd: "/tmp",
+			prompt: "",
+			agentSettings: { modelId: SENTINEL.modelId, reasoningEffort: SENTINEL.reasoningEffort },
+		});
+
+		const modelIndex = launch.args.indexOf("--model");
+		expect(modelIndex).toBeGreaterThan(-1);
+		expect(launch.args[modelIndex + 1]).toBe(SENTINEL.modelId);
+		const effortIndex = launch.args.indexOf("--reasoning-effort");
+		expect(effortIndex).toBeGreaterThan(-1);
+		expect(launch.args[effortIndex + 1]).toBe(SENTINEL.reasoningEffort);
+	});
+
+	it("grok: keeps existing --model or --effort flags and does not duplicate", async () => {
+		setupTempHome();
+		const launch = await prepareAgentLaunch({
+			taskId: "task-1",
+			agentId: "grok",
+			binary: "grok",
+			args: ["--model", "user-pinned-model", "--effort", "high"],
+			cwd: "/tmp",
+			prompt: "",
+			agentSettings: { modelId: SENTINEL.modelId, reasoningEffort: SENTINEL.reasoningEffort },
+		});
+
+		expect(launch.args.filter((arg) => arg === "--model")).toHaveLength(1);
+		expect(launch.args).toContain("user-pinned-model");
+		expect(launch.args).not.toContain(SENTINEL.modelId);
+		expect(launch.args).toContain("--effort");
+		expect(launch.args).not.toContain("--reasoning-effort");
+		expect(launch.args).not.toContain(SENTINEL.reasoningEffort);
 	});
 
 	it("gemini: model via -m only; effort has no flag and is not injected", async () => {

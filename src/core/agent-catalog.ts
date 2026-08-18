@@ -111,6 +111,20 @@ export const RUNTIME_AGENT_CATALOG: RuntimeAgentCatalogEntry[] = [
 		},
 	},
 	{
+		id: "grok",
+		label: "Grok Build",
+		binary: "grok",
+		baseArgs: [],
+		autonomousArgs: ["--permission-mode", "auto"],
+		installUrl: "https://docs.x.ai/build/overview",
+		capabilities: {
+			modelOverride: "flag",
+			effortOverride: "flag",
+			providerOverride: "none",
+			docsUrl: "https://docs.x.ai/build/overview",
+		},
+	},
+	{
 		id: "gemini",
 		label: "Gemini CLI",
 		binary: "gemini",
@@ -134,6 +148,7 @@ export const RUNTIME_LAUNCH_SUPPORTED_AGENT_IDS: readonly RuntimeAgentId[] = [
 	"codex",
 	"droid",
 	"kiro",
+	"grok",
 	// "opencode",
 	// "gemini",
 ];
