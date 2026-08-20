@@ -115,7 +115,7 @@ export const RUNTIME_AGENT_CATALOG: RuntimeAgentCatalogEntry[] = [
 		label: "Grok Build",
 		binary: "grok",
 		baseArgs: [],
-		autonomousArgs: ["--permission-mode", "auto"],
+		autonomousArgs: ["--always-approve"],
 		installUrl: "https://docs.x.ai/build/overview",
 		capabilities: {
 			modelOverride: "flag",

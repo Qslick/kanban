@@ -709,10 +709,8 @@ describe("prepareAgentLaunch hook strategies", () => {
 			cwd: "/tmp",
 			prompt: "",
 		});
-		const grokPermissionModeIndex = grokLaunch.args.indexOf("--permission-mode");
-		expect(grokPermissionModeIndex).toBeGreaterThan(-1);
-		expect(grokLaunch.args[grokPermissionModeIndex + 1]).toBe("auto");
-		expect(grokLaunch.args).not.toContain("--always-approve");
+		expect(grokLaunch.args).toContain("--always-approve");
+		expect(grokLaunch.args).not.toContain("--permission-mode");
 		expect(grokLaunch.args).not.toContain("--yolo");
 
 		const clineLaunch = await prepareAgentLaunch({
@@ -837,6 +835,17 @@ describe("prepareAgentLaunch hook strategies", () => {
 			prompt: "",
 		});
 		expect(kiroLaunch.args).toContain("--trust-all-tools");
+
+		const grokLaunch = await prepareAgentLaunch({
+			taskId: "task-grok-no-auto",
+			agentId: "grok",
+			binary: "grok",
+			args: ["--always-approve"],
+			autonomousModeEnabled: false,
+			cwd: "/tmp",
+			prompt: "",
+		});
+		expect(grokLaunch.args).toContain("--always-approve");
 	});
 
 	it("writes Grok project hooks and launches with trust, rules, and no nested worktree", async () => {
@@ -866,8 +875,8 @@ describe("prepareAgentLaunch hook strategies", () => {
 		expect(launch.args).not.toContain("--system-prompt-override");
 		expect(launch.args).not.toContain("wipe");
 
-		const permissionModeIndex = launch.args.indexOf("--permission-mode");
-		expect(launch.args[permissionModeIndex + 1]).toBe("auto");
+		expect(launch.args).toContain("--always-approve");
+		expect(launch.args).not.toContain("--permission-mode");
 
 		const rulesIndex = launch.args.indexOf("--rules");
 		expect(rulesIndex).toBeGreaterThan(-1);
@@ -894,6 +903,21 @@ describe("prepareAgentLaunch hook strategies", () => {
 		expect(permissionNotification?.hooks?.[0]?.command).toContain("to_review");
 		const idleNotification = hooks.hooks?.Notification?.find((hook) => hook.matcher === "idle_prompt");
 		expect(idleNotification?.hooks?.[0]?.command).toContain("to_review");
+	});
+
+	it("starts Grok autonomous tasks with always-approve even if permission-mode auto is already set", async () => {
+		setupTempHome();
+		const launch = await prepareAgentLaunch({
+			taskId: "task-grok-card-auto",
+			agentId: "grok",
+			binary: "grok",
+			args: ["--permission-mode", "auto"],
+			autonomousModeEnabled: true,
+			cwd: "/tmp",
+			prompt: "Implement the card",
+		});
+		expect(launch.args).toContain("--always-approve");
+		expect(launch.args.filter((arg) => arg === "--always-approve")).toHaveLength(1);
 	});
 
 	it("starts Grok plan mode without auto or always-approve flags", async () => {

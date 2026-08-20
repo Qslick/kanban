@@ -1458,11 +1458,12 @@ const grokAdapter: AgentSessionAdapter = {
 			args.push("--permission-mode", "plan");
 		} else if (
 			input.autonomousModeEnabled &&
-			!hasCliOption(args, "--permission-mode") &&
 			!hasCliOption(args, "--always-approve") &&
 			!hasCliOption(args, "--yolo")
 		) {
-			args.push("--permission-mode", "auto");
+			// Grok --permission-mode auto still prompts for dangerous tools.
+			// Always-approve (alias --yolo) is the unattended YOLO mode.
+			args.push("--always-approve");
 		}
 
 		if (
