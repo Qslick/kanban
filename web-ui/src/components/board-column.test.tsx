@@ -126,6 +126,44 @@ describe("BoardColumn ready now filter", () => {
 		expect(container.querySelector('[aria-label="Ready now"]')?.getAttribute("aria-pressed")).toBe("false");
 	});
 
+	it("shows a Panel indicator on the review column when panel review is enabled", async () => {
+		const board = createBoard({
+			backlogCards: [],
+			reviewCards: [createCard("review-1")],
+		});
+		const review = board.columns.find((column) => column.id === "review");
+		if (!review) {
+			throw new Error("Expected a review column");
+		}
+		await act(async () => {
+			root.render(
+				<TooltipProvider>
+					<BoardColumn column={review} taskSessions={{}} panelReviewEnabled />
+				</TooltipProvider>,
+			);
+		});
+		expect(container.textContent).toContain("Panel");
+	});
+
+	it("hides the Panel indicator when panel review is off", async () => {
+		const board = createBoard({
+			backlogCards: [],
+			reviewCards: [createCard("review-1")],
+		});
+		const review = board.columns.find((column) => column.id === "review");
+		if (!review) {
+			throw new Error("Expected a review column");
+		}
+		await act(async () => {
+			root.render(
+				<TooltipProvider>
+					<BoardColumn column={review} taskSessions={{}} panelReviewEnabled={false} />
+				</TooltipProvider>,
+			);
+		});
+		expect(container.textContent).not.toContain("Panel");
+	});
+
 	it("hides a card with one unfinished blocker when the filter is on", async () => {
 		const ready = createCard("ready", "Ready task");
 		const blocked = createCard("blocked", "Blocked task");

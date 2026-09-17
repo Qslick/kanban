@@ -57,6 +57,7 @@ export function KanbanBoard({
 	onRequestProgrammaticCardMoveReady,
 	workspacePath,
 	defaultClineModelId,
+	panelReviewEnabled,
 }: {
 	data: BoardData;
 	taskSessions: Record<string, RuntimeTaskSessionSummary>;
@@ -84,6 +85,7 @@ export function KanbanBoard({
 	onRequestProgrammaticCardMoveReady?: (requestMove: RequestProgrammaticCardMove | null) => void;
 	workspacePath?: string | null;
 	defaultClineModelId?: string | null;
+	panelReviewEnabled?: boolean;
 }): React.ReactElement {
 	const dragOccurredRef = useRef(false);
 	const boardRef = useRef<HTMLElement>(null);
@@ -436,6 +438,7 @@ export function KanbanBoard({
 							column.id === "backlog" ? () => setReadyNowFilter((current) => !current) : undefined
 						}
 						isCardReadyNow={column.id === "backlog" ? (taskId) => isTaskReadyNow(data, taskId) : undefined}
+						panelReviewEnabled={column.id === "review" ? panelReviewEnabled : undefined}
 						onCardClick={(card) => {
 							if (!dragOccurredRef.current) {
 								onCardSelect(card.id);

@@ -90,6 +90,7 @@ export default defineConfig({
 			"@runtime-task-worktree-path": resolve(__dirname, "../src/workspace/task-worktree-path.ts"),
 			"@runtime-task-state": resolve(__dirname, "../src/core/task-board-mutations.ts"),
 			"@runtime-task-agent-settings": resolve(__dirname, "../src/core/task-agent-settings.ts"),
+			"@runtime-panel-review": resolve(__dirname, "../src/core/panel-review.ts"),
 		},
 	},
 	server: {

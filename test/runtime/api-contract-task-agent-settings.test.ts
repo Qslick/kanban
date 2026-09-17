@@ -55,3 +55,35 @@ describe("runtimeBoardCardSchema agentSettings normalization", () => {
 		expect(card.agentSettings).toEqual({ reasoningEffort: "ultracode" });
 	});
 });
+
+describe("runtimeBoardCardSchema panel review fields", () => {
+	it("parses inherit-by-omission and a custom override", () => {
+		const inherited = parseCard({});
+		expect(inherited.panelReviewMode).toBeUndefined();
+		expect(inherited.panelReviewFamilies).toBeUndefined();
+		expect(inherited.panelReviewRun).toBeUndefined();
+
+		const custom = parseCard({
+			panelReviewMode: "custom",
+			panelReviewFamilies: ["grok", "gemini"],
+			panelReviewRun: {
+				status: "pending",
+				families: ["grok", "gemini"],
+				verdicts: [],
+				recordedAt: 12,
+			},
+		});
+		expect(custom.panelReviewMode).toBe("custom");
+		expect(custom.panelReviewFamilies).toEqual(["grok", "gemini"]);
+		expect(custom.panelReviewRun?.status).toBe("pending");
+	});
+
+	it("rejects unknown families", () => {
+		expect(() =>
+			parseCard({
+				panelReviewMode: "custom",
+				panelReviewFamilies: ["llama"],
+			}),
+		).toThrow();
+	});
+});

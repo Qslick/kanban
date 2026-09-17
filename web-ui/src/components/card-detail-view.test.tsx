@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CardDetailView } from "@/components/card-detail-view";
+import type { RuntimeConfigResponse } from "@/runtime/types";
 import { LocalStorageKey } from "@/storage/local-storage-store";
 import { TERMINAL_THEME_COLORS } from "@/terminal/theme-colors";
 import type { BoardCard, BoardColumn, CardSelection } from "@/types";
@@ -256,10 +257,17 @@ describe("CardDetailView", () => {
 			expandButton.click();
 		});
 
-		const toolbarButtons = Array.from(container.querySelectorAll("button"));
-		expect(toolbarButtons[0]?.getAttribute("aria-label")).toBe("Collapse expanded diff view");
-		expect(toolbarButtons[1]?.textContent?.trim()).toBe("All Changes");
-		expect(toolbarButtons[2]?.textContent?.trim()).toBe("Last Turn");
+		expect(container.querySelector('button[aria-label="Collapse expanded diff view"]')).toBeInstanceOf(
+			HTMLButtonElement,
+		);
+		expect(
+			Array.from(container.querySelectorAll("button")).some(
+				(button) => button.textContent?.trim() === "All Changes",
+			),
+		).toBe(true);
+		expect(
+			Array.from(container.querySelectorAll("button")).some((button) => button.textContent?.trim() === "Last Turn"),
+		).toBe(true);
 		expect(container.querySelector('button[aria-label="Expand split diff view"]')).toBeNull();
 
 		await act(async () => {
@@ -783,5 +791,50 @@ describe("CardDetailView", () => {
 		});
 
 		expect(requireDetailDiffFileTreePanel(container).style.flex).toBe("0 0 18%");
+	});
+
+	it("lets a card override panel review to custom families", async () => {
+		const onPanelReviewOverrideChange = vi.fn();
+		await act(async () => {
+			root.render(
+				<CardDetailView
+					selection={createSelection()}
+					currentProjectId="workspace-1"
+					sessionSummary={null}
+					taskSessions={{}}
+					onSessionSummary={() => {}}
+					onCardSelect={() => {}}
+					onTaskDragEnd={() => {}}
+					onMoveToTrash={() => {}}
+					bottomTerminalOpen={false}
+					bottomTerminalTaskId={null}
+					bottomTerminalSummary={null}
+					onBottomTerminalClose={() => {}}
+					onPanelReviewOverrideChange={onPanelReviewOverrideChange}
+					runtimeConfig={
+						{
+							panelReviewEnabled: true,
+							panelReviewFamilies: ["grok", "claude", "gpt", "gemini"],
+						} as RuntimeConfigResponse
+					}
+				/>,
+			);
+		});
+
+		expect(container.textContent).toContain("Panel review");
+		expect(container.textContent).toContain("Workspace default: Grok, Claude, GPT, Gemini");
+
+		const customButton = Array.from(container.querySelectorAll("button")).find(
+			(button) => button.textContent?.trim() === "Custom",
+		);
+		expect(customButton).toBeInstanceOf(HTMLButtonElement);
+		await act(async () => {
+			customButton?.click();
+		});
+
+		expect(onPanelReviewOverrideChange).toHaveBeenCalledWith({
+			panelReviewMode: "custom",
+			panelReviewFamilies: ["grok", "claude", "gpt", "gemini"],
+		});
 	});
 });

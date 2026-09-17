@@ -150,6 +150,8 @@ export function buildRuntimeConfigResponse(
 		projectConfigPath: runtimeConfig.projectConfigPath,
 		readyForReviewNotificationsEnabled: runtimeConfig.readyForReviewNotificationsEnabled,
 		maxInProgressTasks: runtimeConfig.maxInProgressTasks,
+		panelReviewEnabled: runtimeConfig.panelReviewEnabled,
+		panelReviewFamilies: runtimeConfig.panelReviewFamilies,
 		detectedCommands,
 		agents,
 		shortcuts: runtimeConfig.shortcuts,

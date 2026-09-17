@@ -9,6 +9,7 @@ import {
 	formatTaskAgentSettings,
 	parseTaskIdList,
 	registerTaskCommand,
+	resolvePanelReviewCliInput,
 	resolveSettingsFlag,
 	resolveTaskLinkBlockerIds,
 	shouldWarnOnExplicitAgentId,
@@ -107,6 +108,24 @@ describe("buildTaskAgentSettingsForUpdate", () => {
 	it("accepts arbitrary effort strings on update (opacity proof)", () => {
 		expect(buildTaskAgentSettingsForUpdate(undefined, { reasoningEffort: "MAXIMUM_OVERDRIVE" })).toEqual({
 			reasoningEffort: "MAXIMUM_OVERDRIVE",
+		});
+	});
+});
+
+describe("resolvePanelReviewCliInput", () => {
+	it("allows inherit and off without families", () => {
+		expect(resolvePanelReviewCliInput({ panelReviewMode: "inherit" })).toEqual({ panelReviewMode: "inherit" });
+		expect(resolvePanelReviewCliInput({ panelReviewMode: "off" })).toEqual({ panelReviewMode: "off" });
+	});
+
+	it("requires families for custom and custom for families", () => {
+		expect(() => resolvePanelReviewCliInput({ panelReviewMode: "custom" })).toThrow(/panel-review-families/);
+		expect(() => resolvePanelReviewCliInput({ panelReviewFamilies: ["grok"] })).toThrow(
+			/requires --panel-review custom/,
+		);
+		expect(resolvePanelReviewCliInput({ panelReviewMode: "custom", panelReviewFamilies: ["grok"] })).toEqual({
+			panelReviewMode: "custom",
+			panelReviewFamilies: ["grok"],
 		});
 	});
 });

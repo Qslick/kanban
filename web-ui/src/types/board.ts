@@ -2,6 +2,9 @@ import { isPendingGitActionStale, PENDING_GIT_ACTION_STALE_AFTER_MS } from "@run
 import type {
 	RuntimeAgentId,
 	RuntimeBoardColumnId,
+	RuntimePanelReviewFamily,
+	RuntimePanelReviewMode,
+	RuntimePanelReviewRun,
 	RuntimeTaskAgentSettings,
 	RuntimeTaskAutoReviewMode,
 	RuntimeTaskImage,
@@ -61,6 +64,10 @@ export function getTaskVerifyStatus(
 	return { kind: "pending", label: "Verify pending" };
 }
 
+export type PanelReviewFamily = RuntimePanelReviewFamily;
+export type PanelReviewMode = RuntimePanelReviewMode;
+export type PanelReviewRun = RuntimePanelReviewRun;
+
 export interface BoardCard {
 	id: string;
 	title: string;
@@ -71,6 +78,9 @@ export interface BoardCard {
 	images?: TaskImage[];
 	agentId?: RuntimeAgentId;
 	agentSettings?: RuntimeTaskAgentSettings;
+	panelReviewMode?: PanelReviewMode;
+	panelReviewFamilies?: PanelReviewFamily[];
+	panelReviewRun?: PanelReviewRun;
 	baseRef: string;
 	createdAt: number;
 	updatedAt: number;

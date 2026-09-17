@@ -329,6 +329,8 @@ describe.sequential("runtime-config auto agent selection", () => {
 					agentAutonomousModeEnabled: true,
 					readyForReviewNotificationsEnabled: true,
 					maxInProgressTasks: 3,
+					panelReviewEnabled: false,
+					panelReviewFamilies: ["grok", "claude", "gpt", "gemini"],
 					shortcuts: [],
 					commitPromptTemplate: current.commitPromptTemplateDefault,
 					openPrPromptTemplate: current.openPrPromptTemplateDefault,
@@ -341,6 +343,8 @@ describe.sequential("runtime-config auto agent selection", () => {
 					agentAutonomousModeEnabled?: boolean;
 					readyForReviewNotificationsEnabled?: boolean;
 					maxInProgressTasks?: number;
+					panelReviewEnabled?: boolean;
+					panelReviewFamilies?: string[];
 					commitPromptTemplate?: string;
 					openPrPromptTemplate?: string;
 				};
@@ -348,6 +352,8 @@ describe.sequential("runtime-config auto agent selection", () => {
 				expect(globalPayload.agentAutonomousModeEnabled).toBeUndefined();
 				expect(globalPayload.readyForReviewNotificationsEnabled).toBeUndefined();
 				expect(globalPayload.maxInProgressTasks).toBeUndefined();
+				expect(globalPayload.panelReviewEnabled).toBeUndefined();
+				expect(globalPayload.panelReviewFamilies).toBeUndefined();
 				expect(globalPayload.commitPromptTemplate).toBeUndefined();
 				expect(globalPayload.openPrPromptTemplate).toBeUndefined();
 				expect(existsSync(join(tempProject, ".cline", "kanban", "config.json"))).toBe(false);
@@ -380,6 +386,8 @@ describe.sequential("runtime-config auto agent selection", () => {
 					agentAutonomousModeEnabled: true,
 					readyForReviewNotificationsEnabled: true,
 					maxInProgressTasks: 3,
+					panelReviewEnabled: false,
+					panelReviewFamilies: ["grok", "claude", "gpt", "gemini"],
 					shortcuts: [{ label: "Ship", command: "npm run ship" }],
 					commitPromptTemplate: "commit",
 					openPrPromptTemplate: "pr",
@@ -417,6 +425,8 @@ describe.sequential("runtime-config auto agent selection", () => {
 					agentAutonomousModeEnabled: true,
 					readyForReviewNotificationsEnabled: true,
 					maxInProgressTasks: 3,
+					panelReviewEnabled: false,
+					panelReviewFamilies: ["grok", "claude", "gpt", "gemini"],
 					shortcuts: [],
 					commitPromptTemplate: current.commitPromptTemplateDefault,
 					openPrPromptTemplate: current.openPrPromptTemplateDefault,
@@ -445,6 +455,8 @@ describe.sequential("runtime-config auto agent selection", () => {
 					agentAutonomousModeEnabled: true,
 					readyForReviewNotificationsEnabled: true,
 					maxInProgressTasks: 3,
+					panelReviewEnabled: false,
+					panelReviewFamilies: ["grok", "claude", "gpt", "gemini"],
 					shortcuts: [{ label: "Ship", command: "npm run ship", icon: "rocket" }],
 					commitPromptTemplate: current.commitPromptTemplateDefault,
 					openPrPromptTemplate: current.openPrPromptTemplateDefault,
@@ -517,6 +529,44 @@ describe.sequential("runtime-config auto agent selection", () => {
 
 				const reloaded = await loadRuntimeConfig(tempProject);
 				expect(reloaded.agentAutonomousModeEnabled).toBe(false);
+			});
+		} finally {
+			cleanupProject();
+			cleanupHome();
+		}
+	});
+
+	it("persists panel review defaults and family subsets", async () => {
+		const { path: tempHome, cleanup: cleanupHome } = createTempDir("kanban-home-runtime-config-panel-review-");
+		const { path: tempProject, cleanup: cleanupProject } = createTempDir(
+			"kanban-project-runtime-config-panel-review-",
+		);
+
+		try {
+			await withTemporaryEnv({ home: tempHome }, async () => {
+				const loaded = await loadRuntimeConfig(tempProject);
+				expect(loaded.panelReviewEnabled).toBe(false);
+				expect(loaded.panelReviewFamilies).toEqual(["grok", "claude", "gpt", "gemini"]);
+
+				const enabled = await updateRuntimeConfig(tempProject, {
+					panelReviewEnabled: true,
+					panelReviewFamilies: ["grok", "gemini"],
+				});
+				expect(enabled.panelReviewEnabled).toBe(true);
+				expect(enabled.panelReviewFamilies).toEqual(["grok", "gemini"]);
+
+				const globalPayload = JSON.parse(
+					readFileSync(join(tempHome, ".cline", "kanban", "config.json"), "utf8"),
+				) as {
+					panelReviewEnabled?: boolean;
+					panelReviewFamilies?: string[];
+				};
+				expect(globalPayload.panelReviewEnabled).toBe(true);
+				expect(globalPayload.panelReviewFamilies).toEqual(["grok", "gemini"]);
+
+				const reloaded = await loadRuntimeConfig(tempProject);
+				expect(reloaded.panelReviewEnabled).toBe(true);
+				expect(reloaded.panelReviewFamilies).toEqual(["grok", "gemini"]);
 			});
 		} finally {
 			cleanupProject();
