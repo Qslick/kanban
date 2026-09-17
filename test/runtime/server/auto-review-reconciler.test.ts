@@ -546,7 +546,7 @@ describe("auto-review reconciler", () => {
 		});
 		harness.setProbe("task-1", { exists: true, headCommit: "commit-1", changedFiles: 3 });
 
-		await harness.evaluate();
+		await evaluateUntilPanelSettled(harness, "task-1");
 
 		const result = findCardInBoard(harness.store.stored.board, "task-1");
 		expect(result?.columnId).toBe("review");
@@ -574,7 +574,7 @@ describe("auto-review reconciler", () => {
 		});
 		harness.setProbe("task-1", { exists: true, headCommit: "commit-1", changedFiles: 3 });
 
-		await harness.evaluate();
+		await evaluateUntilPanelSettled(harness, "task-1");
 
 		const result = findCardInBoard(harness.store.stored.board, "task-1");
 		expect(result?.columnId).toBe("review");
@@ -603,7 +603,7 @@ describe("auto-review reconciler", () => {
 		});
 		harness.setProbe("task-1", { exists: true, headCommit: "commit-1", changedFiles: 3 });
 
-		await harness.evaluate();
+		await evaluateUntilPanelSettled(harness, "task-1");
 
 		const result = findCardInBoard(harness.store.stored.board, "task-1");
 		expect(result?.card.pendingGitAction).not.toBeNull();
@@ -639,7 +639,7 @@ describe("auto-review reconciler", () => {
 		});
 		harness.setProbe("task-1", { exists: true, headCommit: "commit-2", changedFiles: 3 });
 
-		await harness.evaluate();
+		await evaluateUntilPanelSettled(harness, "task-1");
 
 		expect(runPanelReview).toHaveBeenCalledTimes(1);
 		const result = findCardInBoard(harness.store.stored.board, "task-1");
@@ -723,7 +723,7 @@ describe("auto-review reconciler", () => {
 		});
 		harness.setProbe("task-1", { exists: true, headCommit: "commit-1", changedFiles: 3 });
 
-		await harness.evaluate();
+		await evaluateUntilPanelSettled(harness, "task-1");
 
 		const result = findCardInBoard(harness.store.stored.board, "task-1");
 		expect(result?.columnId).toBe("review");
@@ -855,7 +855,115 @@ describe("auto-review reconciler", () => {
 		expect(findCardInBoard(harness.store.stored.board, "task-1")?.card.pendingGitAction).not.toBeNull();
 		expect(findCardInBoard(harness.store.stored.board, "task-1")?.card.verifyCommand).toBeUndefined();
 	});
+
+	it("does not await panel CLIs inside the card loop", async () => {
+		let releaseSlow: (run: PanelReviewRun) => void = () => {
+			throw new Error("slow panel released before the test armed it");
+		};
+		const slow = new Promise<PanelReviewRun>((resolve) => {
+			releaseSlow = resolve;
+		});
+		const runPanelReview = vi.fn(async (input: RunPanelReviewInput) => {
+			if (input.taskId === "slow") {
+				return await slow;
+			}
+			return summarizePanelReviewRun({
+				verdicts: [{ family: "claude", verdict: "APPROVE" }],
+				recordedAt: input.recordedAt,
+				headCommit: "commit-1",
+				selection: input.selection,
+			});
+		});
+		const harness = createHarness({
+			board: createBoard({
+				review: [
+					createCard({ id: "slow", autoReviewEnabled: true }),
+					createCard({ id: "fast", autoReviewEnabled: true, panelReviewMode: "off" }),
+				],
+			}),
+			selectedAgentId: "codex",
+			panelReviewConfig: { panelReviewEnabled: true, panelReviewFamilies: DEFAULT_PANEL_REVIEW_FAMILIES },
+			runPanelReview,
+		});
+		harness.setProbe("slow", { exists: true, headCommit: "commit-1", changedFiles: 3 });
+		harness.setProbe("fast", { exists: true, headCommit: "commit-1", changedFiles: 3 });
+
+		await harness.evaluate();
+
+		expect(runPanelReview).toHaveBeenCalledTimes(1);
+		expect(runPanelReview.mock.calls[0]?.[0]?.taskId).toBe("slow");
+		expect(findCardInBoard(harness.store.stored.board, "slow")?.card.panelReviewRun?.status).toBe("pending");
+		expect(findCardInBoard(harness.store.stored.board, "slow")?.card.pendingGitAction ?? null).toBeNull();
+		expect(findCardInBoard(harness.store.stored.board, "fast")?.card.pendingGitAction).not.toBeNull();
+		expect(harness.terminal.writeInput.mock.calls.some((call) => call[0] === "fast")).toBe(true);
+
+		releaseSlow(
+			summarizePanelReviewRun({
+				verdicts: [{ family: "claude", verdict: "APPROVE" }],
+				recordedAt: 1,
+				headCommit: "commit-1",
+				selection: "inherit",
+			}),
+		);
+		await waitForPanelRunStatus(harness, "slow");
+		await harness.evaluate();
+		expect(findCardInBoard(harness.store.stored.board, "slow")?.card.panelReviewRun?.status).toBe("passed");
+		expect(findCardInBoard(harness.store.stored.board, "slow")?.card.pendingGitAction).not.toBeNull();
+	});
+
+	it("ignores late panel results after dispose", async () => {
+		let release: (run: PanelReviewRun) => void = () => {
+			throw new Error("late panel released before dispose");
+		};
+		const hang = new Promise<PanelReviewRun>((resolve) => {
+			release = resolve;
+		});
+		const harness = createHarness({
+			board: createBoard({ review: [createCard({ id: "task-1", autoReviewEnabled: true })] }),
+			selectedAgentId: "codex",
+			panelReviewConfig: { panelReviewEnabled: true, panelReviewFamilies: DEFAULT_PANEL_REVIEW_FAMILIES },
+			runPanelReview: async () => await hang,
+		});
+		harness.setProbe("task-1", { exists: true, headCommit: "commit-1", changedFiles: 3 });
+
+		await harness.evaluate();
+		expect(findCardInBoard(harness.store.stored.board, "task-1")?.card.panelReviewRun?.status).toBe("pending");
+		harness.reconciler.close();
+		release(
+			summarizePanelReviewRun({
+				verdicts: [{ family: "claude", verdict: "APPROVE" }],
+				recordedAt: 1,
+				headCommit: "commit-1",
+				selection: "inherit",
+			}),
+		);
+		for (let attempt = 0; attempt < 30; attempt += 1) {
+			await Promise.resolve();
+		}
+		expect(findCardInBoard(harness.store.stored.board, "task-1")?.card.panelReviewRun?.status).toBe("pending");
+		expect(findCardInBoard(harness.store.stored.board, "task-1")?.card.pendingGitAction ?? null).toBeNull();
+	});
 });
+
+async function waitForPanelRunStatus(harness: ReturnType<typeof createHarness>, taskId: string): Promise<void> {
+	for (let attempt = 0; attempt < 100; attempt += 1) {
+		const status = findCardInBoard(harness.store.stored.board, taskId)?.card.panelReviewRun?.status;
+		if (status && status !== "pending") {
+			await Promise.resolve();
+			await Promise.resolve();
+			return;
+		}
+		await Promise.resolve();
+	}
+	const status = findCardInBoard(harness.store.stored.board, taskId)?.card.panelReviewRun?.status;
+	throw new Error(`Timed out waiting for panel run to settle; got ${status ?? "none"}`);
+}
+
+async function evaluateUntilPanelSettled(harness: ReturnType<typeof createHarness>, taskId: string): Promise<void> {
+	await harness.evaluate();
+	await waitForPanelRunStatus(harness, taskId);
+	await harness.evaluate();
+}
 
 function findCardInBoard(
 	board: RuntimeBoardData,

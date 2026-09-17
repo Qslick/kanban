@@ -395,6 +395,7 @@ async function startServer(): Promise<{
 		{ resolveProjectInputPath },
 		{ pickDirectoryPathFromSystemDialog },
 		{ createAutoReviewReconciler },
+		{ createLivePanelSeatDispatcher },
 		{ createRuntimeServer },
 		{ createRuntimeStateHub },
 		{ resolveInteractiveShellCommand },
@@ -406,6 +407,7 @@ async function startServer(): Promise<{
 		import("./projects/project-path.js"),
 		import("./server/directory-picker.js"),
 		import("./server/auto-review-reconciler.js"),
+		import("./server/panel-review-seats.js"),
 		import("./server/runtime-server.js"),
 		import("./server/runtime-state-hub.js"),
 		import("./server/shell.js"),
@@ -545,6 +547,7 @@ async function startServer(): Promise<{
 			};
 		},
 		getClineTaskSessionService: (workspaceId) => clineTaskSessionServiceByWorkspaceId.get(workspaceId) ?? null,
+		dispatchPanelSeats: createLivePanelSeatDispatcher(),
 		onBoardMutated: (workspaceId, workspacePath) =>
 			void runtimeHub.broadcastRuntimeWorkspaceStateUpdated(workspaceId, workspacePath),
 		warn: (message) => {

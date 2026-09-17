@@ -40,6 +40,12 @@ export interface RunPanelReviewInput {
 	families: PanelReviewFamily[];
 	selection: "inherit" | "custom";
 	recordedAt: number;
+	verifyCommand?: string | null;
+	verifyResult?: {
+		ok: boolean;
+		output?: string;
+		recordedAt: number;
+	} | null;
 }
 
 export interface PanelReviewRunner {
@@ -72,6 +78,30 @@ export async function collectTaskWorktreeDiff(input: CollectWorktreeDiffInput): 
 	};
 }
 
+function buildVerifySection(input: {
+	verifyCommand?: string | null;
+	verifyResult?: {
+		ok: boolean;
+		output?: string;
+		recordedAt: number;
+	} | null;
+}): string {
+	const command = input.verifyCommand?.trim();
+	if (!command) {
+		return "";
+	}
+	const result = input.verifyResult;
+	const status = result ? (result.ok ? "passed" : "failed") : "missing";
+	const output = result?.output?.trim() ? result.output.trim() : "(no output)";
+	return `
+VERIFY
+Command: ${command}
+Last result: ${status}
+Output:
+${output}
+`;
+}
+
 function buildPanelReviewMarkdown(packet: {
 	taskId: string;
 	prompt: string;
@@ -79,8 +109,15 @@ function buildPanelReviewMarkdown(packet: {
 	baseRef: string;
 	headCommit: string | null;
 	diff: string;
+	verifyCommand?: string | null;
+	verifyResult?: {
+		ok: boolean;
+		output?: string;
+		recordedAt: number;
+	} | null;
 }): string {
 	const diffBody = packet.diff.trim().length > 0 ? packet.diff.trim() : "(no diff)";
+	const verifySection = buildVerifySection(packet);
 	return `You are one independent panelist reviewing a Kanban task worktree before auto-review (commit/PR) proceeds.
 
 Rules:
@@ -103,7 +140,7 @@ ${packet.prompt}
 Worktree path (read-only): ${packet.worktreePath}
 Base ref: ${packet.baseRef}
 HEAD: ${packet.headCommit ?? "(unknown)"}
-
+${verifySection}
 DIFF
 ${diffBody}
 
@@ -137,6 +174,12 @@ export function buildPanelReviewPacket(input: {
 	worktreePath: string;
 	baseRef: string;
 	snapshot: WorktreeDiffSnapshot;
+	verifyCommand?: string | null;
+	verifyResult?: {
+		ok: boolean;
+		output?: string;
+		recordedAt: number;
+	} | null;
 }): PanelReviewPacket {
 	const diffSections: string[] = [];
 	if (input.snapshot.status) {
@@ -158,14 +201,19 @@ export function buildPanelReviewPacket(input: {
 	};
 	return {
 		...packet,
-		markdown: buildPanelReviewMarkdown(packet),
+		markdown: buildPanelReviewMarkdown({
+			...packet,
+			verifyCommand: input.verifyCommand,
+			verifyResult: input.verifyResult,
+		}),
 	};
 }
 
 /**
  * Production dispatchers must keep seats read-only: no write tools, and never
- * `--always-approve` / `--yolo` for a Grok reviewer. This stub records no CLI
- * calls; tests inject `dispatchPanelSeats` with verdicts.
+ * `--always-approve` / `--yolo` / `--dangerously-skip-permissions`. Tests inject
+ * `dispatchPanelSeats` so they never call real CLIs. The stub remains for tests
+ * that want UNAVAILABLE seats without a fake spawn.
  */
 export function createStubPanelSeatDispatcher(): DispatchPanelSeats {
 	return async (_packet, families) =>
@@ -208,6 +256,8 @@ export function createPanelReviewRunner(deps: CreatePanelReviewRunnerDependencie
 			worktreePath: worktree.path,
 			baseRef: input.baseRef,
 			snapshot,
+			verifyCommand: input.verifyCommand,
+			verifyResult: input.verifyResult,
 		});
 	};
 

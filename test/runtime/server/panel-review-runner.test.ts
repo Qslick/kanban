@@ -51,6 +51,31 @@ describe("panel-review-runner", () => {
 		expect(packet.headCommit).toBe("abc123");
 	});
 
+	it("includes verify command and output in the packet when present", () => {
+		const packet = buildPanelReviewPacket({
+			taskId: "task-42",
+			prompt: "Add the panel gate",
+			worktreePath: "/tmp/worktree",
+			baseRef: "main",
+			snapshot: {
+				diff: "+export const x = 1;\n",
+				status: " M src/foo.ts",
+				headCommit: "abc123",
+			},
+			verifyCommand: "npm test",
+			verifyResult: {
+				ok: true,
+				output: "3 passing",
+				recordedAt: 10,
+			},
+		});
+
+		expect(packet.markdown).toContain("VERIFY");
+		expect(packet.markdown).toContain("npm test");
+		expect(packet.markdown).toContain("passed");
+		expect(packet.markdown).toContain("3 passing");
+	});
+
 	it("uses the injected dispatcher instead of a real CLI", async () => {
 		const dispatchPanelSeats = vi.fn<DispatchPanelSeats>(async (packet, families) => {
 			expect(packet.readOnly).toBe(true);

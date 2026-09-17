@@ -21,7 +21,7 @@ import type {
 	RuntimeTaskSessionSummary,
 	RuntimeWorkspaceStateResponse,
 } from "../core/api-contract";
-import type { PanelReviewConfig, PanelReviewRun } from "../core/panel-review";
+import type { PanelReviewConfig, PanelReviewFamily, PanelReviewRun } from "../core/panel-review";
 import {
 	createPendingPanelReviewRun,
 	createSkippedPanelReviewRun,
@@ -40,7 +40,8 @@ import type { TerminalSessionManager } from "../terminal/session-manager";
 import { probeGitWorkspaceState } from "../workspace/git-sync";
 import { getTaskWorkspacePathInfo } from "../workspace/task-worktree";
 import type { DispatchPanelSeats, RunPanelReviewInput } from "./panel-review-runner";
-import { createPanelReviewRunner, createStubPanelSeatDispatcher } from "./panel-review-runner";
+import { createPanelReviewRunner } from "./panel-review-runner";
+import { createLivePanelSeatDispatcher } from "./panel-review-seats";
 
 /**
  * Evaluation cadence. Nothing here is latency critical: a slower interval
@@ -100,7 +101,7 @@ export interface CreateAutoReviewReconcilerDependencies {
 	getPanelReviewConfig?: (workspaceId: string, workspacePath: string) => Promise<PanelReviewConfig>;
 	/**
 	 * Injectable panel-seat dispatcher so tests never call real CLIs.
-	 * Production uses a stub until a real read-only dispatcher is wired.
+	 * Production uses the live read-only dispatcher.
 	 */
 	dispatchPanelSeats?: DispatchPanelSeats;
 	/** Full panel runner; tests can inject this instead of a dispatcher. */
@@ -132,6 +133,7 @@ interface ReconcilerWorkspaceRuntime {
 	evaluationPromise: Promise<void> | null;
 	pendingEvaluation: boolean;
 	gitActionInFlightTaskIds: Set<string>;
+	panelReviewInFlightTaskIds: Set<string>;
 	submitTimers: Set<NodeJS.Timeout>;
 	clineUnavailableLoggedTaskIds: Set<string>;
 }
@@ -141,6 +143,7 @@ function createWorkspaceRuntime(): ReconcilerWorkspaceRuntime {
 		evaluationPromise: null,
 		pendingEvaluation: false,
 		gitActionInFlightTaskIds: new Set<string>(),
+		panelReviewInFlightTaskIds: new Set<string>(),
 		submitTimers: new Set<NodeJS.Timeout>(),
 		clineUnavailableLoggedTaskIds: new Set<string>(),
 	};
@@ -243,7 +246,7 @@ export function createAutoReviewReconciler(deps: CreateAutoReviewReconcilerDepen
 	const runPanelReview =
 		deps.runPanelReview ??
 		createPanelReviewRunner({
-			dispatchPanelSeats: deps.dispatchPanelSeats ?? createStubPanelSeatDispatcher(),
+			dispatchPanelSeats: deps.dispatchPanelSeats ?? createLivePanelSeatDispatcher(),
 		}).run;
 	let disposed = false;
 	let evaluationTimer: NodeJS.Timeout | null = null;
@@ -346,6 +349,76 @@ export function createAutoReviewReconciler(deps: CreateAutoReviewReconcilerDepen
 		} catch {
 			return false;
 		}
+	};
+
+	const startPanelReviewFlight = (input: {
+		workspaceId: string;
+		workspacePath: string;
+		taskId: string;
+		prompt: string;
+		baseRef: string;
+		families: PanelReviewFamily[];
+		selection: "inherit" | "custom";
+		recordedAt: number;
+		headCommit: string | null;
+		verifyCommand?: string;
+		verifyResult?: RuntimeBoardCard["verifyResult"];
+		runtime: ReconcilerWorkspaceRuntime;
+	}): void => {
+		if (input.runtime.panelReviewInFlightTaskIds.has(input.taskId)) {
+			return;
+		}
+		input.runtime.panelReviewInFlightTaskIds.add(input.taskId);
+		void (async () => {
+			let panelRun: PanelReviewRun;
+			try {
+				panelRun = {
+					...(await runPanelReview({
+						workspacePath: input.workspacePath,
+						taskId: input.taskId,
+						prompt: input.prompt,
+						baseRef: input.baseRef,
+						families: input.families,
+						selection: input.selection,
+						recordedAt: input.recordedAt,
+						verifyCommand: input.verifyCommand,
+						verifyResult: input.verifyResult,
+					})),
+					headCommit: input.headCommit,
+				};
+			} catch (error) {
+				panelRun = {
+					status: "rejected",
+					verdicts: [],
+					recordedAt: input.recordedAt,
+					headCommit: input.headCommit,
+					note: `Panel review failed: ${String(error)}`,
+				};
+			}
+			if (disposed || !workspaceRuntimes.has(input.workspaceId)) {
+				return;
+			}
+			const persisted = await persistPanelReviewRun(input.workspacePath, input.taskId, panelRun);
+			input.runtime.panelReviewInFlightTaskIds.delete(input.taskId);
+			if (!persisted || disposed || !workspaceRuntimes.has(input.workspaceId)) {
+				return;
+			}
+			const runtimeNow = workspaceRuntimes.get(input.workspaceId);
+			if (runtimeNow?.evaluationPromise) {
+				runtimeNow.pendingEvaluation = true;
+			}
+			try {
+				await deps.onBoardMutated?.(input.workspaceId, input.workspacePath);
+			} catch {
+				// Broadcast is best-effort; the persisted board is already correct.
+			}
+		})()
+			.catch((error) => {
+				deps.warn?.(`Panel review failed for task "${input.taskId}": ${String(error)}`);
+			})
+			.finally(() => {
+				input.runtime.panelReviewInFlightTaskIds.delete(input.taskId);
+			});
 	};
 
 	const completePendingGitAction = async (
@@ -594,70 +667,64 @@ export function createAutoReviewReconciler(deps: CreateAutoReviewReconcilerDepen
 				const probe = await probeTask(card);
 				// Review entries with zero changes (common during planning loops)
 				// are intentionally ignored.
-				if (!probe.exists || probe.changedFiles <= 0 || runtime.gitActionInFlightTaskIds.has(card.id)) {
+				if (!probe.exists || probe.changedFiles <= 0) {
 					continue;
+				}
+				if (runtime.panelReviewInFlightTaskIds.has(card.id) || runtime.gitActionInFlightTaskIds.has(card.id)) {
+					continue;
+				}
+
+				const effectivePanel = resolveEffectivePanelReview({
+					config: panelReviewConfig,
+					cardMode: card.panelReviewMode,
+					cardFamilies: card.panelReviewFamilies,
+					implementerAgentId: effectiveAgent,
+				});
+				if (effectivePanel.skipReason === "inherit-empty") {
+					if (isPanelReviewRunStale(card.panelReviewRun, probe.headCommit)) {
+						const skipped = createSkippedPanelReviewRun({
+							recordedAt: timestamp,
+							headCommit: probe.headCommit,
+							note: "No panel seats remained after excluding the implementing family.",
+						});
+						if (stillTracked() && (await persistPanelReviewRun(workspacePath, card.id, skipped))) {
+							boardMutated = true;
+						}
+					}
+				} else if (effectivePanel.skipReason === null) {
+					if (isPanelReviewRunStale(card.panelReviewRun, probe.headCommit)) {
+						const pending = createPendingPanelReviewRun({
+							recordedAt: timestamp,
+							headCommit: probe.headCommit,
+						});
+						if (stillTracked() && (await persistPanelReviewRun(workspacePath, card.id, pending))) {
+							boardMutated = true;
+						}
+						if (stillTracked()) {
+							startPanelReviewFlight({
+								workspaceId: workspace.workspaceId,
+								workspacePath,
+								taskId: card.id,
+								prompt: card.prompt,
+								baseRef: card.baseRef,
+								families: effectivePanel.families,
+								selection: effectivePanel.mode === "custom" ? "custom" : "inherit",
+								recordedAt: timestamp,
+								headCommit: probe.headCommit,
+								verifyCommand: card.verifyCommand,
+								verifyResult: card.verifyResult,
+								runtime,
+							});
+						}
+						continue;
+					}
+					if (!panelReviewAllowsAutoReview({ skipReason: null, run: card.panelReviewRun })) {
+						continue;
+					}
 				}
 
 				runtime.gitActionInFlightTaskIds.add(card.id);
 				try {
-					const effectivePanel = resolveEffectivePanelReview({
-						config: panelReviewConfig,
-						cardMode: card.panelReviewMode,
-						cardFamilies: card.panelReviewFamilies,
-						implementerAgentId: effectiveAgent,
-					});
-					if (effectivePanel.skipReason === "inherit-empty") {
-						if (isPanelReviewRunStale(card.panelReviewRun, probe.headCommit)) {
-							const skipped = createSkippedPanelReviewRun({
-								recordedAt: timestamp,
-								headCommit: probe.headCommit,
-								note: "No panel seats remained after excluding the implementing family.",
-							});
-							if (stillTracked() && (await persistPanelReviewRun(workspacePath, card.id, skipped))) {
-								boardMutated = true;
-							}
-						}
-					} else if (effectivePanel.skipReason === null) {
-						let panelRun = card.panelReviewRun;
-						if (isPanelReviewRunStale(panelRun, probe.headCommit)) {
-							const pending = createPendingPanelReviewRun({
-								recordedAt: timestamp,
-								headCommit: probe.headCommit,
-							});
-							if (stillTracked() && (await persistPanelReviewRun(workspacePath, card.id, pending))) {
-								boardMutated = true;
-							}
-							try {
-								panelRun = {
-									...(await runPanelReview({
-										workspacePath,
-										taskId: card.id,
-										prompt: card.prompt,
-										baseRef: card.baseRef,
-										families: effectivePanel.families,
-										selection: effectivePanel.mode === "custom" ? "custom" : "inherit",
-										recordedAt: timestamp,
-									})),
-									headCommit: probe.headCommit,
-								};
-							} catch (error) {
-								panelRun = {
-									status: "rejected",
-									verdicts: [],
-									recordedAt: timestamp,
-									headCommit: probe.headCommit,
-									note: `Panel review failed: ${String(error)}`,
-								};
-							}
-							if (stillTracked() && (await persistPanelReviewRun(workspacePath, card.id, panelRun))) {
-								boardMutated = true;
-							}
-						}
-						if (!stillTracked() || !panelReviewAllowsAutoReview({ skipReason: null, run: panelRun })) {
-							continue;
-						}
-					}
-
 					const armed = await armPendingGitAction(
 						workspacePath,
 						card.id,
@@ -791,6 +858,7 @@ export function createAutoReviewReconciler(deps: CreateAutoReviewReconcilerDepen
 				}
 				runtime.submitTimers.clear();
 				runtime.gitActionInFlightTaskIds.clear();
+				runtime.panelReviewInFlightTaskIds.clear();
 				runtime.clineUnavailableLoggedTaskIds.clear();
 			}
 			workspaceRuntimes.clear();
