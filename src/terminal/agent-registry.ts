@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 import type { RuntimeConfigState } from "../config/runtime-config";
 import type { RuntimeAgentCapabilities, RuntimeAgentCatalogEntry } from "../core/agent-catalog";
 import {
@@ -5,13 +9,20 @@ import {
 	isRuntimeAgentLaunchSupported,
 	RUNTIME_AGENT_CATALOG,
 } from "../core/agent-catalog";
+import {
+	type AgentMachineDefaultFileContents,
+	type ProbeAgentMachineDefaultsInput,
+	probeAgentMachineDefaults,
+} from "../core/agent-machine-defaults";
 import type {
 	RuntimeAgentDefinition,
 	RuntimeAgentId,
+	RuntimeAgentMachineDefaults,
 	RuntimeClineProviderSettings,
 	RuntimeConfigResponse,
 } from "../core/api-contract";
 import { isBinaryAvailableOnPath } from "./command-discovery";
+import { getOpenCodeConfigPathCandidates, getOpenCodeModelStatePathCandidates } from "./opencode-paths";
 
 export interface ResolvedAgentCommand {
 	agentId: RuntimeAgentId;
@@ -72,7 +83,84 @@ export function detectInstalledCommands(): string[] {
 	return detected;
 }
 
-function getCuratedDefinitions(runtimeConfig: RuntimeConfigState, detected: string[]): RuntimeAgentDefinition[] {
+export interface AgentMachineDefaultLoadOptions {
+	homeDir?: string;
+	readFile?: (path: string) => string | null;
+	files?: AgentMachineDefaultFileContents;
+	clineProviderSettings?: ProbeAgentMachineDefaultsInput["clineProviderSettings"];
+}
+
+function readTextFileIfExists(path: string): string | null {
+	try {
+		return readFileSync(path, "utf8");
+	} catch {
+		return null;
+	}
+}
+
+function firstExistingText(paths: string[], readFile: (path: string) => string | null): string | null {
+	for (const path of paths) {
+		const text = readFile(path);
+		if (text !== null) {
+			return text;
+		}
+	}
+	return null;
+}
+
+export function loadAgentMachineDefaultFileContents(
+	options: Pick<AgentMachineDefaultLoadOptions, "homeDir" | "readFile"> = {},
+): AgentMachineDefaultFileContents {
+	const homeDir = options.homeDir ?? homedir();
+	const readFile = options.readFile ?? readTextFileIfExists;
+	return {
+		claudeSettings: readFile(join(homeDir, ".claude", "settings.json")),
+		claudeJson: readFile(join(homeDir, ".claude.json")),
+		codexConfig: readFile(join(homeDir, ".codex", "config.toml")),
+		grokConfig: readFile(join(homeDir, ".grok", "config.toml")),
+		clineProviders: readFile(join(homeDir, ".cline", "data", "settings", "providers.json")),
+		geminiSettings: readFile(join(homeDir, ".gemini", "settings.json")),
+		opencodeConfig: firstExistingText(getOpenCodeConfigPathCandidates({ homePath: homeDir }), readFile),
+		opencodeModelState: firstExistingText(getOpenCodeModelStatePathCandidates({ homePath: homeDir }), readFile),
+		droidSettings: firstExistingText(
+			[
+				join(homeDir, ".factory", "settings.json"),
+				join(homeDir, ".factory", "cli.json"),
+				join(homeDir, ".droid", "settings.json"),
+			],
+			readFile,
+		),
+		kiroSettings: firstExistingText(
+			[join(homeDir, ".kiro", "settings.json"), join(homeDir, ".kiro-cli", "config.json")],
+			readFile,
+		),
+	};
+}
+
+function resolveMachineDefaultFiles(options: AgentMachineDefaultLoadOptions = {}): AgentMachineDefaultFileContents {
+	if (options.files !== undefined) {
+		return options.files;
+	}
+	return loadAgentMachineDefaultFileContents(options);
+}
+
+function probeDefaultsForAgent(
+	agentId: RuntimeAgentId,
+	options: AgentMachineDefaultLoadOptions,
+	files: AgentMachineDefaultFileContents,
+): RuntimeAgentMachineDefaults {
+	return probeAgentMachineDefaults(agentId, {
+		files,
+		clineProviderSettings: options.clineProviderSettings,
+	});
+}
+
+function getCuratedDefinitions(
+	runtimeConfig: RuntimeConfigState,
+	detected: string[],
+	options: AgentMachineDefaultLoadOptions,
+	files: AgentMachineDefaultFileContents,
+): RuntimeAgentDefinition[] {
 	const detectedSet = new Set(detected);
 	return getRuntimeLaunchSupportedAgentCatalog().map((entry) => {
 		const defaultArgs = getDefaultArgs(entry.id);
@@ -86,6 +174,7 @@ function getCuratedDefinitions(runtimeConfig: RuntimeConfigState, detected: stri
 			defaultArgs,
 			installed: isInstalled,
 			configured: runtimeConfig.selectedAgentId === entry.id,
+			machineDefaults: probeDefaultsForAgent(entry.id, options, files),
 		};
 	});
 }
@@ -97,11 +186,16 @@ export interface RuntimeAgentCapabilityReportEntry {
 	configured: boolean;
 	launchSupported: boolean;
 	capabilities: RuntimeAgentCapabilities;
+	machineDefaults: RuntimeAgentMachineDefaults;
 }
 
-// Mechanism-only report for the `kanban agents` command: no model/effort value lists.
-export function buildAgentCapabilityReport(runtimeConfig: RuntimeConfigState): RuntimeAgentCapabilityReportEntry[] {
+// Capability report for `kanban agents`: mechanisms plus probed machine defaults.
+export function buildAgentCapabilityReport(
+	runtimeConfig: RuntimeConfigState,
+	options: AgentMachineDefaultLoadOptions = {},
+): RuntimeAgentCapabilityReportEntry[] {
 	const detectedSet = new Set(detectInstalledCommands());
+	const files = resolveMachineDefaultFiles(options);
 	return RUNTIME_AGENT_CATALOG.map((entry) => ({
 		id: entry.id,
 		label: entry.label,
@@ -109,6 +203,7 @@ export function buildAgentCapabilityReport(runtimeConfig: RuntimeConfigState): R
 		configured: runtimeConfig.selectedAgentId === entry.id,
 		launchSupported: isRuntimeAgentLaunchSupported(entry.id),
 		capabilities: entry.capabilities,
+		machineDefaults: probeDefaultsForAgent(entry.id, options, files),
 	}));
 }
 
@@ -134,9 +229,15 @@ export function resolveAgentCommand(runtimeConfig: RuntimeConfigState): Resolved
 export function buildRuntimeConfigResponse(
 	runtimeConfig: RuntimeConfigState,
 	clineProviderSettings: RuntimeClineProviderSettings,
+	options: AgentMachineDefaultLoadOptions = {},
 ): RuntimeConfigResponse {
 	const detectedCommands = detectInstalledCommands();
-	const agents = getCuratedDefinitions(runtimeConfig, detectedCommands);
+	const probeOptions: AgentMachineDefaultLoadOptions = {
+		...options,
+		clineProviderSettings: options.clineProviderSettings ?? clineProviderSettings,
+	};
+	const files = resolveMachineDefaultFiles(probeOptions);
+	const agents = getCuratedDefinitions(runtimeConfig, detectedCommands, probeOptions, files);
 	const resolved = resolveAgentCommand(runtimeConfig);
 	const effectiveCommand = resolved ? joinCommand(resolved.binary, resolved.args) : null;
 

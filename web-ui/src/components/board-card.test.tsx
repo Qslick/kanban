@@ -416,6 +416,52 @@ describe("BoardCard", () => {
 		expect(container.textContent).not.toContain("GPT-5.5 (High)");
 	});
 
+	it("shows the inherited machine default when the card has no model override", async () => {
+		await act(async () => {
+			root.render(
+				<BoardCard
+					card={createCard({ agentId: "claude" })}
+					index={0}
+					columnId="backlog"
+					defaultAgentId="codex"
+					machineDefaultsByAgent={{
+						claude: {
+							modelId: "claude-opus-5",
+							reasoningEffort: "xhigh",
+							source: "claude-settings",
+						},
+					}}
+				/>,
+			);
+		});
+
+		expect(container.textContent).toContain("Claude Code");
+		expect(container.textContent).toContain("claude-opus-5 · xhigh (machine default)");
+	});
+
+	it("shows the workspace agent's machine default on unset cards", async () => {
+		await act(async () => {
+			root.render(
+				<BoardCard
+					card={createCard()}
+					index={0}
+					columnId="backlog"
+					defaultAgentId="claude"
+					machineDefaultsByAgent={{
+						claude: {
+							modelId: "claude-fable-5-1[1m]",
+							reasoningEffort: "xhigh",
+							source: "claude-settings",
+						},
+					}}
+				/>,
+			);
+		});
+
+		expect(container.textContent).toContain("claude-fable-5-1[1m] · xhigh (machine default)");
+		expect(container.textContent).not.toContain("Claude Code ·");
+	});
+
 	it("does not mislabel provider-only overrides as the global default model", async () => {
 		await act(async () => {
 			root.render(

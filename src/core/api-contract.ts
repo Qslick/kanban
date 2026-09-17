@@ -122,6 +122,23 @@ export const runtimeAgentSettingsSchema = z.object({
 	reasoningEffort: z.string().optional(),
 });
 export type RuntimeTaskAgentSettings = z.infer<typeof runtimeAgentSettingsSchema>;
+
+export const runtimeAgentMachineDefaultSourceSchema = z.enum([
+	"claude-settings",
+	"codex-config",
+	"grok-config",
+	"cline-sdk",
+	"unknown",
+]);
+export type RuntimeAgentMachineDefaultSource = z.infer<typeof runtimeAgentMachineDefaultSourceSchema>;
+
+export const runtimeAgentMachineDefaultsSchema = z.object({
+	modelId: z.string().nullable(),
+	reasoningEffort: z.string().nullable(),
+	source: runtimeAgentMachineDefaultSourceSchema,
+	displayModel: z.string().optional(),
+});
+export type RuntimeAgentMachineDefaults = z.infer<typeof runtimeAgentMachineDefaultsSchema>;
 export const runtimeTaskImageSchema = z.object({
 	id: z.string(),
 	data: z.string(),
@@ -1030,6 +1047,7 @@ export const runtimeAgentDefinitionSchema = z.object({
 	defaultArgs: z.array(z.string()),
 	installed: z.boolean(),
 	configured: z.boolean(),
+	machineDefaults: runtimeAgentMachineDefaultsSchema.optional(),
 });
 export type RuntimeAgentDefinition = z.infer<typeof runtimeAgentDefinitionSchema>;
 

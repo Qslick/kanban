@@ -1,4 +1,5 @@
 import type { DropResult } from "@hello-pangea/dnd";
+import { indexAgentMachineDefaults } from "@runtime-agent-machine-defaults";
 import { DEFAULT_PANEL_REVIEW_FAMILIES, type PanelReviewFamily, type PanelReviewMode } from "@runtime-panel-review";
 import { Files, GitCompareArrows, Maximize2, MessageSquare, Minimize2, X } from "lucide-react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
@@ -530,6 +531,10 @@ export function CardDetailView({
 		}
 		return runtimeFiles.map((file) => file.path);
 	}, [runtimeFiles]);
+	const machineDefaultsByAgent = useMemo(
+		() => indexAgentMachineDefaults(runtimeConfig?.agents),
+		[runtimeConfig?.agents],
+	);
 
 	const handleSelectAdjacentCard = useCallback(
 		(step: number) => {
@@ -853,6 +858,8 @@ export function CardDetailView({
 							moveToTrashLoadingById={moveToTrashLoadingById}
 							panelWidth="100%"
 							defaultClineModelId={runtimeConfig?.clineProviderSettings?.modelId ?? null}
+							defaultAgentId={runtimeConfig?.selectedAgentId ?? null}
+							machineDefaultsByAgent={machineDefaultsByAgent}
 						/>
 					</div>
 					<ResizeHandle

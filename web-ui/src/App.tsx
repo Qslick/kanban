@@ -1,6 +1,7 @@
 // Main React composition root for the browser app.
 // Keep this file focused on wiring top-level hooks and surfaces together, and
 // push runtime-specific orchestration down into hooks and service modules.
+import { indexAgentMachineDefaults } from "@runtime-agent-machine-defaults";
 import { DEFAULT_MAX_IN_PROGRESS_TASKS } from "@runtime-in-progress-cap";
 import { FolderOpen } from "lucide-react";
 import type { ReactElement } from "react";
@@ -722,6 +723,10 @@ export default function App(): ReactElement {
 		runtimeProjectConfig?.clineProviderSettings?.providerId ??
 		runtimeProjectConfig?.clineProviderSettings?.oauthProvider ??
 		null;
+	const machineDefaultsByAgent = useMemo(
+		() => indexAgentMachineDefaults(runtimeProjectConfig?.agents),
+		[runtimeProjectConfig?.agents],
+	);
 	const handleClineTaskSettingsChangedForTask = useCallback(
 		({ providerId, modelId, reasoningEffort }: { providerId: string; modelId: string; reasoningEffort: string }) => {
 			if (!selectedCard) {
@@ -799,6 +804,7 @@ export default function App(): ReactElement {
 			defaultProviderId={defaultTaskClineProviderId}
 			defaultModelId={runtimeProjectConfig?.clineProviderSettings?.modelId ?? null}
 			defaultReasoningEffort={runtimeProjectConfig?.clineProviderSettings?.reasoningEffort ?? null}
+			machineDefaultsByAgent={machineDefaultsByAgent}
 			mode="edit"
 			idPrefix={`inline-edit-task-${editingTaskId}`}
 		/>
@@ -970,6 +976,8 @@ export default function App(): ReactElement {
 												}
 												onDragEnd={handleDragEnd}
 												defaultClineModelId={runtimeProjectConfig?.clineProviderSettings?.modelId ?? null}
+												defaultAgentId={runtimeProjectConfig?.selectedAgentId ?? null}
+												machineDefaultsByAgent={machineDefaultsByAgent}
 												panelReviewEnabled={runtimeProjectConfig?.panelReviewEnabled === true}
 											/>
 										)}
@@ -1150,6 +1158,7 @@ export default function App(): ReactElement {
 					defaultProviderId={defaultTaskClineProviderId}
 					defaultModelId={runtimeProjectConfig?.clineProviderSettings?.modelId ?? null}
 					defaultReasoningEffort={runtimeProjectConfig?.clineProviderSettings?.reasoningEffort ?? null}
+					machineDefaultsByAgent={machineDefaultsByAgent}
 				/>
 				<ClearTrashDialog
 					open={isClearTrashDialogOpen}

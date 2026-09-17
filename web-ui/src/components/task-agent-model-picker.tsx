@@ -1,5 +1,6 @@
 import * as Collapsible from "@radix-ui/react-collapsible";
 import { getRuntimeAgentCatalogEntry, getRuntimeLaunchSupportedAgentCatalog } from "@runtime-agent-catalog";
+import type { AgentMachineDefaultsById } from "@runtime-agent-machine-defaults";
 import { ChevronDown } from "lucide-react";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -231,6 +232,7 @@ export function TaskAgentModelPicker({
 	defaultProviderId,
 	defaultReasoningEffort,
 	providerDefaultModels,
+	machineDefaultsByAgent,
 }: {
 	agentId: RuntimeAgentId | undefined;
 	onAgentIdChange: (value: RuntimeAgentId | undefined) => void;
@@ -252,6 +254,8 @@ export function TaskAgentModelPicker({
 	defaultReasoningEffort?: RuntimeClineReasoningEffort | null;
 	/** Map of provider ID → its default model ID (from the provider catalog). */
 	providerDefaultModels?: Record<string, string>;
+	/** Probed machine-default model/effort keyed by agent id. */
+	machineDefaultsByAgent?: AgentMachineDefaultsById;
 }): ReactElement {
 	const updateTaskAgentSettings = useCallback(
 		(updater: (current: RuntimeTaskAgentSettings | undefined) => RuntimeTaskAgentSettings | undefined) => {
@@ -272,6 +276,7 @@ export function TaskAgentModelPicker({
 	const showFreeTextEffortInput = Boolean(
 		effectiveAgentId && effectiveAgentId !== "cline" && effectiveCapabilities?.effortOverride !== "none",
 	);
+	const selectedMachineDefaults = effectiveAgentId ? (machineDefaultsByAgent?.[effectiveAgentId] ?? null) : null;
 
 	const updateOpaqueSetting = useCallback(
 		(field: "modelId" | "reasoningEffort", rawValue: string) => {
@@ -376,6 +381,7 @@ export function TaskAgentModelPicker({
 							showEffortInput={showFreeTextEffortInput}
 							onModelChange={(value) => updateOpaqueSetting("modelId", value)}
 							onEffortChange={(value) => updateOpaqueSetting("reasoningEffort", value)}
+							machineDefaults={selectedMachineDefaults}
 						/>
 					</div>
 				</Collapsible.Content>

@@ -491,6 +491,46 @@ describe("TaskAgentModelPicker – mechanism-driven fields", () => {
 		expect(docsLink?.textContent).toContain("Claude Code CLI reference");
 	});
 
+	it("shows inherited machine defaults as placeholders when the card has no pin", async () => {
+		const { TaskAgentModelPicker } = await import("@/components/task-agent-model-picker");
+
+		await act(async () =>
+			root.render(
+				<TaskAgentModelPicker
+					agentId={"claude" as RuntimeAgentId}
+					onAgentIdChange={() => {}}
+					agentSettings={undefined}
+					onAgentSettingsChange={() => {}}
+					agentOptions={AGENT_OPTIONS}
+					clineProviderOptions={[{ value: "", label: "Default" }]}
+					clineModelOptions={[{ value: "", label: "Default" }]}
+					isLoadingProviders={false}
+					isLoadingModels={false}
+					defaultAgentId={"cline" as RuntimeAgentId}
+					machineDefaultsByAgent={{
+						claude: {
+							modelId: "claude-opus-5",
+							reasoningEffort: "xhigh",
+							source: "claude-settings",
+						},
+					}}
+				/>,
+			),
+		);
+
+		await openOverrideSettings();
+
+		const modelInput = container.querySelector('input[aria-label="Model override"]') as HTMLInputElement | null;
+		const effortInput = container.querySelector(
+			'input[aria-label="Reasoning effort override"]',
+		) as HTMLInputElement | null;
+		expect(modelInput?.placeholder).toBe("claude-opus-5 (machine default)");
+		expect(effortInput?.placeholder).toBe("xhigh (machine default)");
+		expect(modelInput?.value).toBe("");
+		expect(effortInput?.value).toBe("");
+		expect(container.textContent).toContain("Empty inherits this agent's machine default.");
+	});
+
 	it("hides effort for gemini and both free-text fields for kiro", async () => {
 		const { TaskAgentModelPicker } = await import("@/components/task-agent-model-picker");
 

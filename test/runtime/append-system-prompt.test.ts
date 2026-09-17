@@ -115,6 +115,12 @@ describe("renderAppendSystemPrompt", () => {
 		expect(rendered).toContain("capabilities.modelOverride");
 		expect(rendered).toContain("capabilities.effortOverride");
 		expect(rendered).toContain("capabilities.docsUrl");
+		expect(rendered).toContain("machineDefaults.modelId");
+		expect(rendered).toContain("machineDefaults.reasoningEffort");
+		expect(rendered).toContain("claude-settings");
+		expect(rendered).toContain("codex-config");
+		expect(rendered).toContain("grok-config");
+		expect(rendered).toContain("cline-sdk");
 	});
 
 	it("encodes override behavior without hardcoded model names or effort tables", () => {
@@ -123,6 +129,9 @@ describe("renderAppendSystemPrompt", () => {
 		expect(rendered).toContain("# Per-Task Agent, Provider, Model, and Effort Overrides");
 		expect(rendered).toContain("Never invent or guess a model ID");
 		expect(rendered).toContain("surface the agent's own error message");
+		expect(rendered).toContain("omit `--model` and `--effort`");
+		expect(rendered).toContain("small/mechanical");
+		expect(rendered).toContain("Never copy the machine default onto the card");
 
 		// No hardcoded model IDs or effort-level vocabularies may leak into the prompt.
 		expect(rendered).not.toContain("claude-sonnet-4-20250514");

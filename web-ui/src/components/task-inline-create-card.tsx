@@ -1,9 +1,9 @@
 import * as RadixCheckbox from "@radix-ui/react-checkbox";
+import type { AgentMachineDefaultsById } from "@runtime-agent-machine-defaults";
 import { deriveTaskTitleFromPrompt } from "@runtime-task-title";
 import { ArrowBigUp, Check, Command, CornerDownLeft } from "lucide-react";
 import { type Dispatch, type ReactElement, type SetStateAction, useCallback, useRef, useState } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
-
 import { BranchSelectDropdown, type BranchSelectOption } from "@/components/branch-select-dropdown";
 import { TaskAgentModelPicker, useTaskAgentModelPicker } from "@/components/task-agent-model-picker";
 import { TaskPromptComposer } from "@/components/task-prompt-composer";
@@ -75,6 +75,7 @@ export function TaskInlineCreateCard({
 	defaultProviderId,
 	defaultModelId,
 	defaultReasoningEffort,
+	machineDefaultsByAgent,
 }: {
 	title?: string;
 	onTitleChange?: (value: string) => void;
@@ -111,6 +112,7 @@ export function TaskInlineCreateCard({
 	defaultModelId?: string | null;
 	/** Default Cline reasoning effort from runtimeConfig.clineProviderSettings.reasoningEffort */
 	defaultReasoningEffort?: RuntimeClineReasoningEffort | null;
+	machineDefaultsByAgent?: AgentMachineDefaultsById;
 }): ReactElement {
 	const promptId = `${idPrefix}-prompt-input`;
 	const planModeId = `${idPrefix}-plan-mode-toggle`;
@@ -325,6 +327,7 @@ export function TaskInlineCreateCard({
 						defaultProviderId={defaultProviderId}
 						defaultReasoningEffort={defaultReasoningEffort}
 						providerDefaultModels={providerDefaultModels}
+						machineDefaultsByAgent={machineDefaultsByAgent}
 						onPopoverOpenChange={setIsModelPickerPopoverOpen}
 					/>
 				) : null}

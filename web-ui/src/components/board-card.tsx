@@ -1,5 +1,6 @@
 import { Draggable } from "@hello-pangea/dnd";
 import { getRuntimeAgentCatalogEntry } from "@runtime-agent-catalog";
+import { type AgentMachineDefaultsById, formatMachineDefaultHint } from "@runtime-agent-machine-defaults";
 import { formatClineToolCallLabel } from "@runtime-cline-tool-call-display";
 import { buildTaskWorktreeDisplayPath } from "@runtime-task-worktree-path";
 import {
@@ -25,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
-import type { RuntimeTaskSessionSummary } from "@/runtime/types";
+import type { RuntimeAgentId, RuntimeTaskSessionSummary } from "@/runtime/types";
 import { useTaskWorkspaceSnapshotValue } from "@/stores/workspace-metadata-store";
 import type { BoardCard as BoardCardModel, BoardColumnId } from "@/types";
 import { getTaskAutoReviewCancelButtonLabel, getTaskVerifyStatus } from "@/types";
@@ -246,6 +247,8 @@ export function BoardCard({
 	isDependencyLinking = false,
 	workspacePath,
 	defaultClineModelId = null,
+	defaultAgentId = null,
+	machineDefaultsByAgent,
 }: {
 	card: BoardCardModel;
 	index: number;
@@ -270,6 +273,8 @@ export function BoardCard({
 	isDependencyLinking?: boolean;
 	workspacePath?: string | null;
 	defaultClineModelId?: string | null;
+	defaultAgentId?: RuntimeAgentId | null;
+	machineDefaultsByAgent?: AgentMachineDefaultsById;
 }): React.ReactElement {
 	const [isHovered, setIsHovered] = useState(false);
 	const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -453,8 +458,19 @@ export function BoardCard({
 		[card.agentId],
 	);
 	const modelOverrideLabel = useMemo(() => {
+		const effectiveAgentId = card.agentId ?? defaultAgentId ?? null;
+		const machineDefaults = effectiveAgentId ? (machineDefaultsByAgent?.[effectiveAgentId] ?? null) : null;
 		if (card.agentSettings === undefined) {
-			return null;
+			const inheritedModelId =
+				machineDefaults?.displayModel ??
+				machineDefaults?.modelId ??
+				(effectiveAgentId === "cline" ? defaultClineModelId : null);
+			const displayModel = inheritedModelId ? resolveClineModelDisplayName(inheritedModelId) : null;
+			return formatMachineDefaultHint({
+				modelId: displayModel,
+				reasoningEffort: machineDefaults?.reasoningEffort ?? null,
+				source: machineDefaults?.source ?? "unknown",
+			});
 		}
 		const explicitReasoningLabel = card.agentSettings.reasoningEffort
 			? formatClineReasoningEffortLabel(card.agentSettings.reasoningEffort)
@@ -465,7 +481,7 @@ export function BoardCard({
 			const providerLabel = `Provider: ${card.agentSettings.providerId}`;
 			return explicitReasoningLabel ? `${providerLabel} (${explicitReasoningLabel})` : providerLabel;
 		}
-		const effectiveModelId = card.agentSettings.modelId ?? defaultClineModelId;
+		const effectiveModelId = card.agentSettings.modelId ?? defaultClineModelId ?? machineDefaults?.modelId;
 		if (!effectiveModelId) {
 			return explicitReasoningLabel ? `Default model (${explicitReasoningLabel})` : null;
 		}
@@ -479,7 +495,7 @@ export function BoardCard({
 			reasoningEffort: inheritedReasoningEffort,
 			showReasoningEffort: Boolean(inheritedReasoningEffort),
 		});
-	}, [card.agentSettings, defaultClineModelId]);
+	}, [card.agentId, card.agentSettings, defaultAgentId, defaultClineModelId, machineDefaultsByAgent]);
 	const taskAgentSettingsLabel = useMemo(() => {
 		const parts = [agentOverrideLabel, modelOverrideLabel].filter((value): value is string => Boolean(value));
 		return parts.length > 0 ? parts.join(" · ") : null;
