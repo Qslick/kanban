@@ -253,6 +253,27 @@ describe("runOnDemandUpdate", () => {
 		]);
 	});
 
+	it("refuses to overwrite a qslick personal fork with stock npm Kanban", async () => {
+		let runUpdateCalled = false;
+
+		const result = await runOnDemandUpdate({
+			currentVersion: "0.1.71-qslick.1",
+			packageName: "kanban",
+			argv: ["node", "/usr/local/lib/node_modules/kanban/dist/cli.js"],
+			cwd: "/Users/saoud/projects/work",
+			resolveRealPath: (path) => path,
+			fetchLatestVersion: async () => "1.1.0",
+			runUpdateCommand: () => {
+				runUpdateCalled = true;
+				return 0;
+			},
+		});
+
+		expect(result.status).toBe("unsupported_installation");
+		expect(result.message).toContain("qslick personal fork");
+		expect(runUpdateCalled).toBe(false);
+	});
+
 	it("returns already_up_to_date when current version matches latest", async () => {
 		let runUpdateCalled = false;
 
@@ -323,6 +344,25 @@ describe("runOnDemandUpdate", () => {
 });
 
 describe("runAutoUpdateCheck", () => {
+	it("does not auto-update a qslick personal fork", async () => {
+		const spawnedUpdates: Array<{ command: string; args: string[] }> = [];
+
+		await runAutoUpdateCheck({
+			currentVersion: "0.1.71-qslick.1",
+			packageName: "kanban",
+			argv: ["node", "/usr/local/lib/node_modules/kanban/dist/cli.js"],
+			cwd: "/Users/saoud/projects/work",
+			env: {},
+			resolveRealPath: (path) => path,
+			fetchLatestVersion: async () => "1.1.0",
+			spawnUpdate: (command, args) => {
+				spawnedUpdates.push({ command, args });
+			},
+		});
+
+		expect(spawnedUpdates).toEqual([]);
+	});
+
 	it("spawns a global update when a newer version is available", async () => {
 		const spawnedUpdates: Array<{ command: string; args: string[] }> = [];
 

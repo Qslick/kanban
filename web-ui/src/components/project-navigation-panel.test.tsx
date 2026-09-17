@@ -190,6 +190,17 @@ describe("ProjectNavigationPanel width persistence", () => {
 		expect(sidebar.style.width).toBe(`${expectedResizedWidth}px`);
 	});
 
+	it("shows a qslick fork badge when the app version is a personal build", () => {
+		(globalThis as typeof globalThis & { __APP_VERSION__?: string }).__APP_VERSION__ = "0.1.71-qslick.1";
+		renderPanel();
+		expect(container.textContent).toContain("v0.1.71-qslick.1");
+		expect(container.textContent).toContain("qslick");
+		const badge = Array.from(container.querySelectorAll("span")).find(
+			(element) => element.textContent === "qslick" && element.getAttribute("title")?.includes("fork"),
+		);
+		expect(badge).toBeDefined();
+	});
+
 	it("renders beta hint card with report issue in the projects view", () => {
 		renderPanel();
 		expect(container.textContent).toContain("Kanban is in beta. Help us improve by sharing your experience.");

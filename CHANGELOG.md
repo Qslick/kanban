@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.71-qslick.1]
+
+Personal qslick fork of Cline Kanban `0.1.70` / upstream `main` @ `abd4912`. Not published to npm.
+
+- CLI and sidebar identify this build as the qslick fork; `kanban --update` will not overwrite it with stock npm Kanban
+- Piped `task list` no longer truncates at 64 KiB; task JSON includes `title`
+- Terminal scrollback and dead-viewer backpressure no longer freeze the board or stall the agent PTY
+- Auto-review runs in the runtime so review cards do not strand without a browser tab
+- Failed agent runs stay in Review with a red indicator instead of auto-completing
+- Task worktrees no longer symlink credential files such as `.env`
+- Cline sessions recover after a crash mid-tool-call and after a process restart
+- Linked backlog cards auto-start only when **every** prerequisite is Done (AND, issue #473)
+- Grok Build CLI is a launch-supported board agent
+
 ## [0.1.70]
 
 - Fixed a freeze that could occur when clearing completed tasks on large boards by limiting cleanup concurrency

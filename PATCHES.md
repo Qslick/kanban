@@ -3,6 +3,8 @@
 This is a personal daily-driver fork of [cline/kanban](https://github.com/cline/kanban).
 It is not an upstream release and is not published to npm.
 
+Version: `0.1.71-qslick.1`. CLI `--version` and the sidebar show `qslick`. `kanban --update` is refused so npm cannot overwrite this checkout.
+
 Base: `upstream/main` at `abd4912` (2026-09-04 security pin), not npm `v0.1.70`.
 
 Install this checkout with `npm run link`. Roll back to the published binary with `npm run unlink` then `npm i -g kanban@0.1.70` if PATH no longer has it.

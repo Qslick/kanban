@@ -298,9 +298,17 @@ export function ProjectNavigationPanel({
 			)}
 			<div style={{ padding: "12px 12px 8px" }}>
 				<div className="flex items-center justify-between">
-					<div className="font-semibold text-base flex items-baseline gap-1.5">
+					<div className="font-semibold text-base flex items-baseline gap-1.5 min-w-0">
 						<ClineIcon size={18} className="text-text-primary shrink-0 self-center" />
 						Cline <span className="text-text-secondary font-normal text-xs">v{__APP_VERSION__}</span>
+						{__APP_VERSION__.includes("-qslick.") ? (
+							<span
+								className="inline-flex items-center rounded-full text-[10px] px-1.5 py-px font-medium bg-accent-fg/20 text-accent-fg"
+								title="Personal qslick fork of Cline Kanban"
+							>
+								qslick
+							</span>
+						) : null}
 					</div>
 					{isMobile ? (
 						<Button

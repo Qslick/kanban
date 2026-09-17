@@ -2,6 +2,8 @@ import { spawn, spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { isPersonalForkVersion, personalForkUpdateMessage } from "../fork-identity";
+
 export enum UpdatePackageManager {
 	NPM = "npm",
 	PNPM = "pnpm",
@@ -594,6 +596,16 @@ export function runPendingAutoUpdateOnShutdown(options?: {
 }
 
 export async function runOnDemandUpdate(options: OnDemandUpdateOptions): Promise<OnDemandUpdateResult> {
+	if (isPersonalForkVersion(options.currentVersion)) {
+		return {
+			status: "unsupported_installation",
+			currentVersion: options.currentVersion,
+			latestVersion: null,
+			packageManager: UpdatePackageManager.LOCAL,
+			message: personalForkUpdateMessage(options.currentVersion),
+		};
+	}
+
 	const entrypointArg = options.argv?.[1] ?? process.argv[1];
 	if (!entrypointArg) {
 		return {
@@ -708,7 +720,7 @@ export async function runOnDemandUpdate(options: OnDemandUpdateOptions): Promise
 
 export async function runAutoUpdateCheck(options: UpdateStartupOptions): Promise<void> {
 	const env = options.env ?? process.env;
-	if (isAutoUpdateDisabled(env)) {
+	if (isAutoUpdateDisabled(env) || isPersonalForkVersion(options.currentVersion)) {
 		return;
 	}
 

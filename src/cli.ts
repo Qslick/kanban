@@ -32,6 +32,7 @@ import {
 	setKanbanRuntimePort,
 	setKanbanRuntimeTls,
 } from "./core/runtime-endpoint";
+import { formatCliVersion, isPersonalForkVersion } from "./fork-identity";
 import { disablePasscode, generateInternalToken, generatePasscode } from "./security/passcode-manager";
 import type { AutoReviewReconciler } from "./server/auto-review-reconciler";
 import { terminateProcessForTimeout } from "./server/process-termination";
@@ -645,6 +646,9 @@ async function runMainCommand(options: CliOptions, shouldAutoOpenBrowser: boolea
 		throw error;
 	}
 	console.log(`Cline Kanban running at ${runtime.url}`);
+	if (isPersonalForkVersion(KANBAN_VERSION)) {
+		console.log(`qslick fork ${KANBAN_VERSION}`);
+	}
 	if (!options.noOpen && shouldAutoOpenBrowser) {
 		try {
 			openInBrowser(runtime.url, {
@@ -732,7 +736,7 @@ function createProgram(invocationArgs: string[]): Command {
 	program
 		.name("kanban")
 		.description("Local orchestration board for coding agents.")
-		.version(KANBAN_VERSION, "-v, --version", "Output the version number")
+		.version(formatCliVersion(KANBAN_VERSION), "-v, --version", "Output the version number")
 		.option("--host <ip>", "Host IP to bind the server to (default: 127.0.0.1).")
 		.option("--port <number|auto>", "Runtime port (1-65535) or auto.", parseCliPortValue)
 		.option("--no-open", "Do not open browser automatically.")
