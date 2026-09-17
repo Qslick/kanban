@@ -5,6 +5,7 @@ import type {
 	RuntimeAgentId,
 	RuntimeBoardCard,
 	RuntimeBoardColumnId,
+	RuntimeBoardData,
 	RuntimeBoardDependency,
 	RuntimeTaskAgentSettings,
 	RuntimeWorkspaceStateResponse,
@@ -17,6 +18,7 @@ import {
 	addTaskToColumn,
 	deleteTasksFromBoard,
 	getTaskColumnId,
+	getUnfinishedPrerequisiteTaskIds,
 	moveTaskToColumn,
 	type RuntimeAddTaskDependencyResult,
 	removeTaskDependency,
@@ -70,6 +72,89 @@ function parseListColumn(value: string | undefined): ListTaskColumn | undefined 
 		return value;
 	}
 	throw new Error(`Invalid column "${value}". Expected one of: ${LIST_TASK_COLUMNS.join(", ")}, done.`);
+}
+
+export function parseTaskIdList(value: string, flagName = "--blocked-by"): string[] {
+	const ids: string[] = [];
+	const seen = new Set<string>();
+	for (const part of value.split(",")) {
+		const id = part.trim();
+		if (!id || seen.has(id)) {
+			continue;
+		}
+		seen.add(id);
+		ids.push(id);
+	}
+	if (ids.length === 0) {
+		throw new Error(`Invalid ${flagName} value "${value}". Expected one or more task IDs.`);
+	}
+	return ids;
+}
+
+function collectBlockedByOption(value: string, previous: string[] = []): string[] {
+	return [...previous, value];
+}
+
+export function resolveTaskLinkBlockerIds(input: { linkedTaskId?: string; blockedBy?: string[] | string }): string[] {
+	const blockers: string[] = [];
+	const seen = new Set<string>();
+
+	const addFromFlag = (value: string, flagName: string) => {
+		for (const id of parseTaskIdList(value, flagName)) {
+			if (seen.has(id)) {
+				continue;
+			}
+			seen.add(id);
+			blockers.push(id);
+		}
+	};
+
+	if (typeof input.blockedBy === "string") {
+		addFromFlag(input.blockedBy, "--blocked-by");
+	} else if (input.blockedBy) {
+		for (const value of input.blockedBy) {
+			addFromFlag(value, "--blocked-by");
+		}
+	}
+
+	if (input.linkedTaskId !== undefined) {
+		const linkedTaskId = input.linkedTaskId.trim();
+		if (!linkedTaskId) {
+			throw new Error(`Invalid --linked-task-id value "${input.linkedTaskId}". Expected a task ID.`);
+		}
+		if (!seen.has(linkedTaskId)) {
+			blockers.push(linkedTaskId);
+		}
+	}
+
+	if (blockers.length === 0) {
+		throw new Error("task link requires --linked-task-id or --blocked-by.");
+	}
+	return blockers;
+}
+
+export function addTaskDependencies(
+	board: RuntimeBoardData,
+	taskId: string,
+	blockerIds: string[],
+): { board: RuntimeBoardData; dependencies: RuntimeBoardDependency[] } {
+	if (blockerIds.length === 0) {
+		throw new Error("task link requires --linked-task-id or --blocked-by.");
+	}
+	let nextBoard = board;
+	const dependencies: RuntimeBoardDependency[] = [];
+	for (const blockerId of blockerIds) {
+		const linked = addTaskDependency(nextBoard, taskId, blockerId);
+		if (!linked.added || !linked.dependency) {
+			throw new Error(getLinkFailureMessage(linked.reason));
+		}
+		nextBoard = linked.board;
+		dependencies.push(linked.dependency);
+	}
+	return {
+		board: nextBoard,
+		dependencies,
+	};
 }
 
 function parseAutoReviewMode(value: string | undefined): "commit" | "pr" | undefined {
@@ -364,6 +449,17 @@ function findTaskRecord(
 	return null;
 }
 
+function formatUnfinishedPrerequisites(state: RuntimeWorkspaceStateResponse, taskId: string): JsonRecord[] {
+	return getUnfinishedPrerequisiteTaskIds(state.board, taskId).map((prereqId) => {
+		const record = findTaskRecord(state, prereqId);
+		return {
+			id: prereqId,
+			title: record?.task.title ?? null,
+			column: record?.columnId ?? null,
+		};
+	});
+}
+
 function formatTaskRecord(
 	state: RuntimeWorkspaceStateResponse,
 	task: RuntimeBoardCard,
@@ -383,6 +479,7 @@ function formatTaskRecord(
 		...formatTaskAgentSettings(task.agentSettings),
 		createdAt: task.createdAt,
 		updatedAt: task.updatedAt,
+		unfinishedPrerequisites: formatUnfinishedPrerequisites(state, task.id),
 		session: session
 			? {
 					state: session.state,
@@ -425,7 +522,7 @@ function getLinkFailureMessage(reason: RuntimeAddTaskDependencyResult["reason"])
 	if (reason === "non_backlog") {
 		return "Links require at least one backlog task.";
 	}
-	return "One or both tasks could not be found.";
+	return "One or more tasks could not be found.";
 }
 
 function findTasksInColumn(
@@ -466,6 +563,27 @@ async function listTasks(input: { cwd: string; projectPath?: string; column?: Li
 		tasks,
 		dependencies: state.board.dependencies.map((dependency) => formatDependencyRecord(state, dependency)),
 		count: tasks.length,
+	};
+}
+
+async function showTask(input: { cwd: string; taskId: string; projectPath?: string }): Promise<JsonRecord> {
+	const workspace = await resolveRuntimeWorkspace(input.projectPath, input.cwd, {
+		autoCreateIfMissing: false,
+	});
+	const runtimeClient = createRuntimeTrpcClient(workspace.workspaceId);
+	const state = await runtimeClient.workspace.getState.query();
+	const taskId = input.taskId.trim();
+	if (!taskId) {
+		throw new Error("task show requires --task-id.");
+	}
+	const record = findTaskRecord(state, taskId);
+	if (!record) {
+		throw new Error(`Task "${taskId}" was not found in workspace ${workspace.repoPath}.`);
+	}
+	return {
+		ok: true,
+		workspacePath: workspace.repoPath,
+		task: formatTaskRecord(state, record.task, record.columnId),
 	};
 }
 
@@ -647,31 +765,29 @@ async function updateTaskCommand(input: {
 async function linkTasks(input: {
 	cwd: string;
 	taskId: string;
-	linkedTaskId: string;
+	blockerIds: string[];
 	projectPath?: string;
 }): Promise<JsonRecord> {
 	const workspaceRepoPath = await resolveWorkspaceRepoPath(input.projectPath, input.cwd);
 	const workspaceId = await ensureRuntimeWorkspace(workspaceRepoPath);
 	const runtimeClient = createRuntimeTrpcClient(workspaceId);
-	const dependency = await updateRuntimeWorkspaceState(runtimeClient, workspaceRepoPath, (runtimeState) => {
-		const linked = addTaskDependency(runtimeState.board, input.taskId, input.linkedTaskId);
-		if (!linked.added || !linked.dependency) {
-			throw new Error(getLinkFailureMessage(linked.reason));
-		}
-
+	const dependencies = await updateRuntimeWorkspaceState(runtimeClient, workspaceRepoPath, (runtimeState) => {
+		const linked = addTaskDependencies(runtimeState.board, input.taskId, input.blockerIds);
 		const nextState: RuntimeWorkspaceStateResponse = {
 			...runtimeState,
 			board: linked.board,
 		};
 		return {
 			board: linked.board,
-			value: formatDependencyRecord(nextState, linked.dependency),
+			value: linked.dependencies.map((dependency) => formatDependencyRecord(nextState, dependency)),
 		};
 	});
+	const [dependency] = dependencies;
 	return {
 		ok: true,
 		workspacePath: workspaceRepoPath,
-		dependency,
+		dependencies,
+		...(dependency ? { dependency } : {}),
 	};
 }
 
@@ -1150,7 +1266,7 @@ export function registerTaskCommand(program: Command): void {
 
 	task
 		.command("list")
-		.description("List Kanban tasks for a workspace.")
+		.description("List Kanban tasks for a workspace, including remaining unfinished prerequisites.")
 		.option("--project-path <path>", "Workspace path. Defaults to current directory workspace.")
 		.option(
 			"--column <column>",
@@ -1164,6 +1280,22 @@ export function registerTaskCommand(program: Command): void {
 						cwd: process.cwd(),
 						projectPath: options.projectPath,
 						column: options.column,
+					}),
+			);
+		});
+
+	task
+		.command("show")
+		.description("Show one Kanban task, including remaining unfinished prerequisites.")
+		.requiredOption("--task-id <id>", "Task ID.")
+		.option("--project-path <path>", "Workspace path. Defaults to current directory workspace.")
+		.action(async (options: { taskId: string; projectPath?: string }) => {
+			await runTaskCommand(
+				async () =>
+					await showTask({
+						cwd: process.cwd(),
+						taskId: options.taskId,
+						projectPath: options.projectPath,
 					}),
 			);
 		});
@@ -1369,37 +1501,50 @@ export function registerTaskCommand(program: Command): void {
 
 	task
 		.command("link")
-		.description("Link two tasks so one task waits on another.")
-		.requiredOption("--task-id <id>", "One of the two task IDs to link.")
-		.requiredOption("--linked-task-id <id>", "The other task ID to link.")
+		.description("Link a task so it waits on one or more blockers.")
+		.requiredOption("--task-id <id>", "The waiting task ID. This task waits on the blockers.")
+		.option("--linked-task-id <id>", "A single blocker task ID (legacy single-link).")
+		.option(
+			"--blocked-by <ids>",
+			"Blocker task IDs that --task-id waits on. Comma-separated; repeatable.",
+			collectBlockedByOption,
+		)
 		.option("--project-path <path>", "Workspace path. Defaults to current directory workspace.")
 		.addHelpText(
 			"after",
 			[
 				"",
 				"Dependency direction:",
+				"  --task-id waits on --blocked-by / --linked-task-id. Provide at least one.",
 				"  If both linked tasks are in backlog, Kanban preserves the order you pass:",
-				"  --task-id waits on --linked-task-id, and on the board the arrow points into",
-				"  --linked-task-id.",
+				"  --task-id waits on each blocker, and on the board the arrow points into",
+				"  the blocker.",
+				"  Multiple blockers are AND: the waiting task becomes ready only after every",
+				"  linked review prerequisite is moved to done.",
 				"  Once only one linked task remains in backlog, Kanban reorients the saved link",
 				"  so the backlog task is the waiting dependent task and the other task is the",
 				"  prerequisite.",
-				"  When the prerequisite finishes review and moves to done, the waiting backlog",
-				"  task becomes ready to start.",
+				"  When every remaining prerequisite finishes review and moves to done, the",
+				"  waiting backlog task becomes ready to start.",
 				"",
 			].join("\n"),
 		)
-		.action(async (options: { taskId: string; linkedTaskId: string; projectPath?: string }) => {
-			await runTaskCommand(
-				async () =>
-					await linkTasks({
-						cwd: process.cwd(),
-						taskId: options.taskId,
-						linkedTaskId: options.linkedTaskId,
-						projectPath: options.projectPath,
-					}),
-			);
-		});
+		.action(
+			async (options: { taskId: string; linkedTaskId?: string; blockedBy?: string[]; projectPath?: string }) => {
+				await runTaskCommand(
+					async () =>
+						await linkTasks({
+							cwd: process.cwd(),
+							taskId: options.taskId,
+							blockerIds: resolveTaskLinkBlockerIds({
+								linkedTaskId: options.linkedTaskId,
+								blockedBy: options.blockedBy,
+							}),
+							projectPath: options.projectPath,
+						}),
+				);
+			},
+		);
 
 	task
 		.command("unlink")

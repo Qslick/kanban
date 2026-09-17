@@ -152,6 +152,7 @@ const KANBAN_SUBCOMMAND_LABELS: Record<string, string> = {
 	start: "Starting task",
 	update: "Updating task",
 	list: "Listing tasks",
+	show: "Showing task",
 };
 
 /**
@@ -164,7 +165,9 @@ function resolveKanbanCommandDisplay(command: string): ClineToolCallDisplay | nu
 	if (!/kanban/i.test(command)) {
 		return null;
 	}
-	const taskSubcommandMatch = command.match(/\btask\s+(create|link|unlink|trash|done|delete|start|update|list)\b/);
+	const taskSubcommandMatch = command.match(
+		/\btask\s+(create|link|unlink|trash|done|delete|start|update|list|show)\b/,
+	);
 	if (!taskSubcommandMatch?.[1]) {
 		return null;
 	}
@@ -186,10 +189,13 @@ function resolveKanbanCommandDisplay(command: string): ClineToolCallDisplay | nu
 	} else if (subcommand === "link") {
 		const taskIdMatch = command.match(/--task-id\s+(?:"([^"]*)"|'([^']*)'|(\S+))/);
 		const linkedIdMatch = command.match(/--linked-task-id\s+(?:"([^"]*)"|'([^']*)'|(\S+))/);
+		const blockedByMatch = command.match(/--blocked-by\s+(?:"([^"]*)"|'([^']*)'|(\S+))/);
 		const taskId = taskIdMatch?.[1] ?? taskIdMatch?.[2] ?? taskIdMatch?.[3] ?? null;
 		const linkedId = linkedIdMatch?.[1] ?? linkedIdMatch?.[2] ?? linkedIdMatch?.[3] ?? null;
-		if (taskId && linkedId) {
-			inputSummary = `${shortId(taskId)} → ${shortId(linkedId)}`;
+		const blockedBy = blockedByMatch?.[1] ?? blockedByMatch?.[2] ?? blockedByMatch?.[3] ?? null;
+		const firstBlocker = linkedId ?? blockedBy?.split(",")[0]?.trim() ?? null;
+		if (taskId && firstBlocker) {
+			inputSummary = `${shortId(taskId)} → ${shortId(firstBlocker)}`;
 		}
 	} else if (subcommand === "unlink") {
 		const depIdMatch = command.match(/--dependency-id\s+(?:"([^"]*)"|'([^']*)'|(\S+))/);

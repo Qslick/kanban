@@ -222,14 +222,10 @@ function getLinkedBacklogTaskIdsReadyAfterTaskTrashed(
 		if (getTaskColumnId(board, dependency.fromTaskId) !== "backlog") {
 			continue;
 		}
-		const remainingPrereqs = board.dependencies.filter((candidate) => candidate.fromTaskId === dependency.fromTaskId);
-		const allPrereqsDone = remainingPrereqs.every((prereq) => {
-			if (prereq.toTaskId === taskId) {
-				return true;
-			}
-			return getTaskColumnId(board, prereq.toTaskId) === "trash";
-		});
-		if (allPrereqsDone) {
+		const remainingUnfinished = getUnfinishedPrerequisiteTaskIds(board, dependency.fromTaskId).filter(
+			(prereqId) => prereqId !== taskId,
+		);
+		if (remainingUnfinished.length === 0) {
 			readyTaskIds.add(dependency.fromTaskId);
 		}
 	}
@@ -357,6 +353,31 @@ export function getTaskColumnId(board: RuntimeBoardData, taskId: string): Runtim
 	}
 	const found = findTaskLocation(board, normalizedTaskId);
 	return found ? found.columnId : null;
+}
+
+/** Prerequisite IDs that still block `taskId` (everything except Done/trash). */
+export function getUnfinishedPrerequisiteTaskIds(board: RuntimeBoardData, taskId: string): string[] {
+	const normalizedTaskId = taskId.trim();
+	if (!normalizedTaskId || board.dependencies.length === 0) {
+		return [];
+	}
+	const unfinished: string[] = [];
+	const seen = new Set<string>();
+	for (const dependency of board.dependencies) {
+		if (dependency.fromTaskId !== normalizedTaskId) {
+			continue;
+		}
+		const prereqId = dependency.toTaskId.trim();
+		if (!prereqId || seen.has(prereqId)) {
+			continue;
+		}
+		if (getTaskColumnId(board, prereqId) === "trash") {
+			continue;
+		}
+		seen.add(prereqId);
+		unfinished.push(prereqId);
+	}
+	return unfinished;
 }
 
 export function addTaskDependency(
