@@ -234,7 +234,16 @@ function getLinkedBacklogTaskIdsReadyAfterTaskTrashed(
 		if (getTaskColumnId(board, dependency.fromTaskId) !== "backlog") {
 			continue;
 		}
-		readyTaskIds.add(dependency.fromTaskId);
+		const remainingPrereqs = board.dependencies.filter((candidate) => candidate.fromTaskId === dependency.fromTaskId);
+		const allPrereqsDone = remainingPrereqs.every((prereq) => {
+			if (prereq.toTaskId === taskId) {
+				return true;
+			}
+			return getTaskColumnId(board, prereq.toTaskId) === "trash";
+		});
+		if (allPrereqsDone) {
+			readyTaskIds.add(dependency.fromTaskId);
+		}
 	}
 	return [...readyTaskIds];
 }

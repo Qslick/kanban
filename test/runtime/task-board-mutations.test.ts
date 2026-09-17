@@ -272,3 +272,47 @@ describe("per-task agent/model/provider overrides", () => {
 		});
 	});
 });
+
+describe("AND dependency auto-start", () => {
+	it("does not unlock a backlog card until every review prerequisite is done", () => {
+		const createA = addTaskToColumn(createBoard(), "review", { prompt: "Task A", baseRef: "main" }, () => "aaaaa111");
+		const createB = addTaskToColumn(createA.board, "review", { prompt: "Task B", baseRef: "main" }, () => "bbbbb111");
+		const createC = addTaskToColumn(
+			createB.board,
+			"backlog",
+			{ prompt: "Task C", baseRef: "main" },
+			() => "ccccc111",
+		);
+		const linkA = addTaskDependency(createC.board, "ccccc", "aaaaa");
+		const linkB = addTaskDependency(linkA.board, "ccccc", "bbbbb");
+		if (!linkA.added || !linkB.added) {
+			throw new Error("Expected both dependencies to be created.");
+		}
+
+		const trashA = trashTaskAndGetReadyLinkedTaskIds(linkB.board, "aaaaa");
+		expect(trashA.moved).toBe(true);
+		expect(trashA.readyTaskIds).toEqual([]);
+
+		const trashB = trashTaskAndGetReadyLinkedTaskIds(trashA.board, "bbbbb");
+		expect(trashB.moved).toBe(true);
+		expect(trashB.readyTaskIds).toEqual(["ccccc"]);
+	});
+
+	it("still unlocks a backlog card that has a single review prerequisite", () => {
+		const createA = addTaskToColumn(createBoard(), "review", { prompt: "Task A", baseRef: "main" }, () => "aaaaa111");
+		const createC = addTaskToColumn(
+			createA.board,
+			"backlog",
+			{ prompt: "Task C", baseRef: "main" },
+			() => "ccccc111",
+		);
+		const linked = addTaskDependency(createC.board, "ccccc", "aaaaa");
+		if (!linked.added) {
+			throw new Error("Expected dependency to be created.");
+		}
+
+		const trashA = trashTaskAndGetReadyLinkedTaskIds(linked.board, "aaaaa");
+		expect(trashA.moved).toBe(true);
+		expect(trashA.readyTaskIds).toEqual(["ccccc"]);
+	});
+});
