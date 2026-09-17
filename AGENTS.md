@@ -56,12 +56,13 @@ Styling mental model
 - The design system tokens are defined in `globals.css` inside `@theme { ... }`. Use Tailwind utilities that reference them: `bg-surface-0`, `text-text-primary`, `border-border`, etc.
 
 Design tokens (defined in globals.css @theme)
-- Surface hierarchy: `surface-0` (#1F2428, app bg / columns), `surface-1` (#24292E, navbar / project col / raised), `surface-2` (#2D3339, cards/inputs), `surface-3` (#353C43, hover), `surface-4` (#3E464E, pressed/scrollbars)
-- Borders: `border` (#30363D, default), `border-bright` (#444C56, more visible), `border-focus` (#0084FF, focus rings)
-- Text: `text-primary` (#E6EDF3), `text-secondary` (#8B949E), `text-tertiary` (#6E7681)
-- Accent: `accent` (#0084FF), `accent-hover` (#339DFF)
+- Surface hierarchy: `surface-0` (#151A1E, app bg / columns), `surface-1` (#1C2126, navbar / project col / raised), `surface-2` (#252B31, cards/inputs), `surface-3` (#31383F, hover), `surface-4` (#3F4750, pressed/scrollbars)
+- Borders: `border` (#2A323A, default), `border-bright` (#414B56, more visible), `border-focus` (#1F87B5, focus rings)
+- Text: `text-primary` (#E8EEF4), `text-secondary` (#8B96A2), `text-tertiary` (#6A7480)
+- Accent: `accent` (#1F87B5), `accent-hover` (#3B9CC6)
 - Status: `status-blue` (#4C9AFF), `status-green` (#3FB950), `status-orange` (#D29922), `status-red` (#F85149), `status-purple` (#A371F7), `status-gold` (#D4A72C)
 - Border radius: `rounded-sm` (4px), `rounded-md` (6px), `rounded-lg` (8px), `rounded-xl` (12px)
+- Motion: `--ease-out` cubic-bezier(0.23, 1, 0.32, 1), `--ease-in-out` cubic-bezier(0.77, 0, 0.175, 1), `--duration-fast` 120ms, `--duration-ui` 180ms, `--duration-overlay` 220ms. Animate transform/opacity only. Gate hover motion with `@media (hover: hover) and (pointer: fine)`. `prefers-reduced-motion: reduce` drops transform motion and keeps opacity/color. Never `transition: all`.
 
 UI primitives (src/components/ui/)
 - `Button` from `@/components/ui/button`: `variant="default"|"primary"|"danger"|"ghost"`, `size="sm"|"md"`, `icon={<LucideIcon />}`, `fill`, children for text content.

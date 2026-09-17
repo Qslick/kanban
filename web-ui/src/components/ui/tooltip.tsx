@@ -24,8 +24,7 @@ export function Tooltip({
 			<RadixTooltip.Portal>
 				<RadixTooltip.Content
 					side={side}
-					className="z-50 rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-xs text-text-primary shadow-lg"
-					style={{ animation: "kb-tooltip-show 100ms ease" }}
+					className="kb-tooltip-content z-50 rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-xs text-text-primary shadow-lg"
 					sideOffset={5}
 				>
 					{content}

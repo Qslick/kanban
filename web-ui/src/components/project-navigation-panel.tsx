@@ -269,16 +269,12 @@ export function ProjectNavigationPanel({
 			className={cn(
 				"flex flex-col min-h-0 overflow-hidden bg-surface-1 shrink-0",
 				isMobile ? "fixed inset-y-0 left-0 z-50 shadow-2xl" : "relative",
+				isMobile && (isMobileClosing ? "kb-sidebar-mobile-closing" : "kb-sidebar-mobile"),
 			)}
 			onAnimationEnd={isMobileClosing ? handleMobileCloseAnimationEnd : undefined}
 			style={
 				isMobile
-					? {
-							width: "100vw",
-							animation: isMobileClosing
-								? "kb-sidebar-slide-out 200ms ease forwards"
-								: "kb-sidebar-slide-in 200ms ease",
-						}
+					? { width: "100vw" }
 					: {
 							width: sidebarWidth,
 							minWidth: SIDEBAR_MIN_EXPANDED_WIDTH,
@@ -303,7 +299,7 @@ export function ProjectNavigationPanel({
 						Cline <span className="text-text-secondary font-normal text-xs">v{__APP_VERSION__}</span>
 						{__APP_VERSION__.includes("-qslick.") ? (
 							<span
-								className="inline-flex items-center rounded-full text-[10px] px-1.5 py-px font-medium bg-accent-fg/20 text-accent-fg"
+								className="inline-flex items-center rounded-full text-[10px] px-1.5 py-px font-medium bg-accent/15 text-accent border border-accent/30"
 								title="Personal qslick fork of Cline Kanban"
 							>
 								qslick
@@ -321,13 +317,13 @@ export function ProjectNavigationPanel({
 						/>
 					) : null}
 				</div>
-				<div className="mt-2.5 rounded-lg bg-surface-0/70 border border-border/80 p-0.5 shadow-inner">
+				<div className="mt-2.5 rounded-lg bg-surface-0/80 border border-border p-0.5">
 					<div className="grid grid-cols-2 gap-0.5">
 						<button
 							type="button"
 							onClick={() => onActiveSectionChange("projects")}
 							className={cn(
-								"cursor-pointer rounded-md py-1.5 text-xs font-medium transition-all text-center",
+								"kb-btn cursor-pointer rounded-md py-1.5 text-xs font-medium text-center",
 								activeSection === "projects"
 									? "bg-surface-2 text-text-primary border border-border/80 shadow-xs font-semibold"
 									: "text-text-secondary hover:text-text-primary border border-transparent",
@@ -340,7 +336,7 @@ export function ProjectNavigationPanel({
 							onClick={() => onActiveSectionChange("agent")}
 							disabled={!canShowAgentSection}
 							className={cn(
-								"cursor-pointer rounded-md py-1.5 text-xs font-medium transition-all text-center",
+								"kb-btn cursor-pointer rounded-md py-1.5 text-xs font-medium text-center",
 								activeSection === "agent"
 									? "bg-surface-2 text-text-primary border border-border/80 shadow-xs font-semibold"
 									: "text-text-secondary hover:text-text-primary border border-transparent",
@@ -573,7 +569,7 @@ function ProjectSupportFooter({
 
 	return (
 		<div style={{ padding: "4px 12px 12px" }}>
-			<div className="flex items-start gap-2 rounded-md border border-border bg-surface-2 px-3 py-2.5">
+			<div className="flex items-start gap-2 rounded-lg border border-border bg-surface-2/80 px-3 py-2.5">
 				<Info size={14} className="mt-px shrink-0 text-text-tertiary" />
 				<div className="flex flex-col gap-1.5">
 					<p className="m-0 text-xs text-text-secondary">
@@ -630,7 +626,7 @@ function ShortcutsCard(): React.ReactElement {
 
 	return (
 		<div style={{ padding: "6px 12px 8px" }}>
-			<div className="rounded-lg border border-border/70 bg-surface-2/40 p-2.5 shadow-xs">
+			<div className="rounded-lg border border-border/80 bg-surface-2/50 p-2.5 shadow-xs">
 				<div className="flex flex-col gap-0.5">
 					{ESSENTIAL_SHORTCUTS.map((s) => (
 						<ShortcutHint key={s.label} keys={s.keys} label={s.label} />
@@ -756,7 +752,7 @@ function ProjectRow({
 				}
 			}}
 			className={cn(
-				"kb-project-row group relative flex items-center gap-2 rounded-lg cursor-pointer transition-all",
+				"kb-project-row group relative flex items-center gap-2 rounded-lg cursor-pointer",
 				isCurrent
 					? "kb-project-row-selected border border-accent/35 shadow-xs"
 					: "hover:bg-surface-2/70 border border-transparent",

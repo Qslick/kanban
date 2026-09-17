@@ -118,7 +118,7 @@ export function BoardColumn({
 	return (
 		<section
 			data-column-id={column.id}
-			className="flex flex-col min-w-0 min-h-0 bg-surface-1/90 rounded-xl overflow-hidden border border-border/80 shadow-xs"
+			className="flex flex-col min-w-0 min-h-0 bg-surface-1 rounded-xl overflow-hidden border border-border shadow-xs"
 			style={{
 				flex: "1 1 0",
 			}}
@@ -132,7 +132,7 @@ export function BoardColumn({
 			/>
 			<div className="flex flex-col min-h-0 flex-1">
 				<div
-					className="flex items-center justify-between px-3 py-2 shrink-0 border-b border-border/40"
+					className="flex items-center justify-between px-3 py-1.5 shrink-0 border-b border-border/60"
 					style={{
 						minHeight: 40,
 					}}
@@ -142,7 +142,7 @@ export function BoardColumn({
 						<span className="font-semibold text-sm text-text-primary tracking-[-0.01em] truncate">
 							{column.title}
 						</span>
-						<span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-semibold bg-surface-3/80 text-text-secondary border border-border/50">
+						<span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-semibold tabular-nums bg-surface-3/80 text-text-secondary border border-border/60">
 							{visibleCards.length}
 						</span>
 						{column.id === "review" && panelReviewEnabled ? (
@@ -203,8 +203,8 @@ export function BoardColumn({
 							ref={cardProvided.innerRef}
 							{...cardProvided.droppableProps}
 							className={cn(
-								"kb-column-cards transition-colors duration-150",
-								snapshot?.isDraggingOver && "bg-surface-2/30",
+								"kb-column-cards transition-colors duration-fast ease",
+								snapshot?.isDraggingOver && "bg-surface-2/40",
 							)}
 						>
 							{canCreate ? (
@@ -214,20 +214,20 @@ export function BoardColumn({
 									fill
 									variant="default"
 									onClick={onCreateTask}
-									className="h-8 mb-2 shrink-0 border border-dashed border-border-bright/70 bg-surface-2/60 hover:bg-surface-3 hover:border-solid hover:border-accent/60 text-text-secondary hover:text-text-primary text-xs font-medium rounded-lg transition-all"
+									className="h-8 mb-2 shrink-0 border border-dashed border-border-bright/70 bg-surface-2/50 hover:bg-surface-3 hover:border-solid hover:border-accent/60 text-text-secondary hover:text-text-primary text-xs font-medium rounded-lg"
 								>
 									{createTaskButtonText}
 								</Button>
 							) : null}
 
 							{readyNowFilter && visibleCards.length === 0 ? (
-								<div className="flex flex-1 flex-col items-center justify-center p-4 text-center rounded-lg border border-dashed border-border/50 text-text-tertiary my-2">
-									<p className="text-xs text-text-tertiary/70 m-0">No ready cards</p>
+								<div className="kb-column-empty flex flex-1 flex-col items-center justify-center p-4 text-center rounded-lg border border-dashed border-border/60 text-text-tertiary my-2">
+									<p className="text-xs text-text-tertiary m-0">No ready cards</p>
 								</div>
 							) : null}
 							{!readyNowFilter && column.cards.length === 0 && !canCreate ? (
-								<div className="flex flex-1 flex-col items-center justify-center p-4 text-center rounded-lg border border-dashed border-border/50 text-text-tertiary my-2">
-									<p className="text-xs text-text-tertiary/70 m-0">
+								<div className="kb-column-empty flex flex-1 flex-col items-center justify-center p-4 text-center rounded-lg border border-dashed border-border/60 text-text-tertiary my-2">
+									<p className="text-xs text-text-tertiary m-0">
 										{COLUMN_EMPTY_LABELS[column.id] ?? "No tasks"}
 									</p>
 								</div>

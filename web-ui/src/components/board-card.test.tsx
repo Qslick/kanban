@@ -231,7 +231,7 @@ describe("BoardCard", () => {
 		const trashButton = container.querySelector('button[aria-label="Move task to done"]');
 		expect(trashButton).toBeInstanceOf(HTMLButtonElement);
 		expect((trashButton as HTMLButtonElement | null)?.disabled).toBe(true);
-		expect(trashButton?.querySelector("svg.animate-spin")).toBeTruthy();
+		expect(trashButton?.querySelector("svg.kb-spinner")).toBeTruthy();
 	});
 
 	it("shows inline see more and less controls for long descriptions", async () => {

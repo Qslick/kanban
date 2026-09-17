@@ -458,7 +458,7 @@ export function TaskCreateDialog({
 								<button
 									type="button"
 									onClick={handleSplitIntoTasks}
-									className="inline-flex items-center gap-1.5 text-[12px] text-status-blue hover:text-[#86BEFF] cursor-pointer shrink-0"
+									className="inline-flex items-center gap-1.5 text-[12px] text-accent hover:text-accent-hover cursor-pointer shrink-0"
 								>
 									<List size={12} />
 									Split into {detectedItems.length} tasks
@@ -481,7 +481,7 @@ export function TaskCreateDialog({
 										onChange={(e) => handleUpdateTaskPrompt(index, e.target.value)}
 										onKeyDown={(e) => handleInputKeyDown(index, e)}
 										placeholder="Describe the task..."
-										className="flex-1 min-w-0 rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-border-focus focus:outline-none"
+										className="flex-1 min-w-0 rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-border-focus focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-border-focus"
 									/>
 									<Button
 										variant="ghost"
@@ -514,7 +514,7 @@ export function TaskCreateDialog({
 					</div>
 				)}
 
-				<div className="flex flex-col gap-2.5 mt-4 pt-4 border-t border-border">
+				<div className="flex flex-col gap-2.5 mt-4 pt-3.5 border-t border-border">
 					<label
 						htmlFor={startInPlanModeId}
 						className="flex items-center gap-2 text-[12px] text-text-primary cursor-pointer select-none"
@@ -527,7 +527,7 @@ export function TaskCreateDialog({
 							className="flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded-sm border border-border-bright bg-surface-3 data-[state=checked]:bg-accent data-[state=checked]:border-accent disabled:cursor-default disabled:opacity-40"
 						>
 							<RadixCheckbox.Indicator>
-								<Check size={10} className="text-white" />
+								<Check size={10} className="text-accent-fg" />
 							</RadixCheckbox.Indicator>
 						</RadixCheckbox.Root>
 						Start in plan mode
@@ -557,7 +557,7 @@ export function TaskCreateDialog({
 								className="flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded-sm border border-border-bright bg-surface-3 data-[state=checked]:bg-accent data-[state=checked]:border-accent"
 							>
 								<RadixCheckbox.Indicator>
-									<Check size={10} className="text-white" />
+									<Check size={10} className="text-accent-fg" />
 								</RadixCheckbox.Indicator>
 							</RadixCheckbox.Root>
 							Automatically
@@ -608,7 +608,7 @@ export function TaskCreateDialog({
 						onCheckedChange={setCreateMore}
 						className="relative h-5 w-9 rounded-full bg-surface-4 data-[state=checked]:bg-accent cursor-pointer"
 					>
-						<RadixSwitch.Thumb className="block h-4 w-4 rounded-full bg-white shadow-sm transition-transform translate-x-0.5 data-[state=checked]:translate-x-[18px]" />
+						<RadixSwitch.Thumb className="block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-fast ease-out translate-x-0.5 data-[state=checked]:translate-x-[18px]" />
 					</RadixSwitch.Root>
 					<span>Create more</span>
 				</label>
@@ -654,7 +654,7 @@ export function TaskCreateDialog({
 										side="bottom"
 										align="end"
 										sideOffset={4}
-										className="z-50 rounded-md border border-border-bright bg-surface-1 p-1 shadow-lg"
+										className="kb-popover-content z-50 rounded-md border border-border-bright bg-surface-1 p-1 shadow-lg"
 										onCloseAutoFocus={(event) => event.preventDefault()}
 									>
 										<DropdownMenu.Item

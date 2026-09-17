@@ -27,10 +27,7 @@ export function Dialog({
 	return (
 		<RadixDialog.Root open={open} onOpenChange={onOpenChange}>
 			<RadixDialog.Portal>
-				<RadixDialog.Overlay
-					className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs touch-none"
-					style={{ animation: "kb-overlay-show 150ms ease" }}
-				/>
+				<RadixDialog.Overlay className="kb-overlay fixed inset-0 z-50 bg-black/60 backdrop-blur-xs touch-none" />
 				<RadixDialog.Content
 					aria-describedby={contentAriaDescribedBy}
 					onEscapeKeyDown={onEscapeKeyDown}
@@ -56,13 +53,13 @@ export function DialogHeader({
 	children?: ReactNode;
 }): React.ReactElement {
 	return (
-		<div className="flex items-center justify-between px-3.5 py-2.5 max-md:px-3 max-md:py-3 bg-surface-2 border-b border-border shrink-0 rounded-t-xl">
-			<RadixDialog.Title className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+		<div className="flex items-center justify-between px-3.5 py-2.5 max-md:px-3 max-md:py-3 bg-surface-2/80 border-b border-border shrink-0 rounded-t-xl">
+			<RadixDialog.Title className="flex items-center gap-2 text-sm font-semibold tracking-[-0.01em] text-text-primary">
 				{icon ? <span className="text-text-secondary">{icon}</span> : null}
 				{title}
 			</RadixDialog.Title>
 			{children}
-			<RadixDialog.Close className="p-1 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-3 cursor-pointer max-md:min-h-11 max-md:min-w-11 max-md:flex max-md:items-center max-md:justify-center transition-colors">
+			<RadixDialog.Close className="kb-btn p-1 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-3 cursor-pointer max-md:min-h-11 max-md:min-w-11 max-md:flex max-md:items-center max-md:justify-center focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-border-focus">
 				<X size={16} className="max-md:hidden" />
 				<X size={20} className="hidden max-md:block" />
 			</RadixDialog.Close>
@@ -107,10 +104,7 @@ export function AlertDialog({
 	return (
 		<RadixAlertDialog.Root open={open} onOpenChange={onOpenChange}>
 			<RadixAlertDialog.Portal>
-				<RadixAlertDialog.Overlay
-					className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs touch-none"
-					style={{ animation: "kb-overlay-show 150ms ease" }}
-				/>
+				<RadixAlertDialog.Overlay className="kb-overlay fixed inset-0 z-50 bg-black/60 backdrop-blur-xs touch-none" />
 				<RadixAlertDialog.Content className="kb-dialog-content fixed left-1/2 top-1/2 z-50 flex max-h-[85vh] w-[90vw] max-w-md flex-col rounded-xl border border-border-bright bg-surface-1 shadow-2xl shadow-black/60 ring-1 ring-white/5 focus:outline-none">
 					{children}
 				</RadixAlertDialog.Content>
@@ -129,7 +123,7 @@ export function AlertDialogHeader({
 	return (
 		<div
 			className={cn(
-				"px-3.5 py-2.5 max-md:px-3 max-md:py-3 bg-surface-2 border-b border-border shrink-0 rounded-t-xl",
+				"px-3.5 py-2.5 max-md:px-3 max-md:py-3 bg-surface-2/80 border-b border-border shrink-0 rounded-t-xl",
 				className,
 			)}
 		>

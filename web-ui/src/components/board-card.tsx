@@ -518,7 +518,7 @@ export function BoardCard({
 						ref={provided.innerRef}
 						{...provided.draggableProps}
 						{...provided.dragHandleProps}
-						className="kb-board-card-shell"
+						className={cn("kb-board-card-shell", isDragging && "kb-board-card-dragging")}
 						data-task-id={card.id}
 						data-column-id={columnId}
 						data-selected={selected}
@@ -581,21 +581,21 @@ export function BoardCard({
 					>
 						<div
 							className={cn(
-								"kb-board-card-inner rounded-xl border border-border/80 bg-surface-2 p-3 shadow-xs",
-								isCardInteractive && "cursor-pointer hover:bg-surface-2 hover:border-border-bright",
-								isDragging && "shadow-2xl shadow-black/80 ring-1 ring-accent scale-[1.02] rotate-[0.5deg]",
+								"kb-board-card-inner rounded-lg border border-border/70 bg-surface-2 px-2.5 py-2 shadow-xs",
+								isCardInteractive && "cursor-pointer",
+								isDragging && "shadow-xl shadow-black/50 ring-1 ring-accent",
 								isHovered && isCardInteractive && "border-border-bright",
 								isDependencySource && "kb-board-card-dependency-source",
 								isDependencyTarget && "kb-board-card-dependency-target",
 							)}
 						>
 							{/* Top header row: Status Marker + Issue Key + Floating actions */}
-							<div className="flex items-center justify-between gap-1.5 mb-1.5" style={{ minHeight: 22 }}>
+							<div className="flex items-center justify-between gap-1.5 mb-1" style={{ minHeight: 20 }}>
 								<div className="flex items-center gap-1.5 min-w-0">
 									{statusMarker ? (
 										<div className="inline-flex items-center shrink-0">{statusMarker}</div>
 									) : null}
-									<span className="font-mono text-[10px] font-semibold text-text-tertiary px-1.5 py-0.5 rounded bg-surface-3/80 border border-border/40 shrink-0">
+									<span className="font-mono text-[10px] font-medium tracking-wide text-text-tertiary px-1.5 py-px rounded-sm bg-surface-3/70 border border-border/50 shrink-0">
 										{taskKey}
 									</span>
 									{card.panelReviewRun?.status ? (
@@ -604,7 +604,7 @@ export function BoardCard({
 										</span>
 									) : null}
 								</div>
-								<div className="flex items-center gap-1 shrink-0">
+								<div className="flex items-center gap-0.5 shrink-0">
 									{onSaveTitle && !isEditingTitle ? (
 										<button
 											type="button"
@@ -616,7 +616,7 @@ export function BoardCard({
 												setIsEditingTitle(true);
 											}}
 											className={cn(
-												"cursor-pointer rounded p-0.5 text-text-tertiary hover:text-text-primary hover:bg-surface-3 transition-opacity",
+												"kb-btn cursor-pointer rounded p-0.5 text-text-tertiary hover:text-text-primary hover:bg-surface-3",
 												isHovered ? "opacity-100" : "opacity-0",
 											)}
 										>
@@ -631,7 +631,7 @@ export function BoardCard({
 											title="Start task"
 											aria-label="Start task"
 											className={cn(
-												"h-6 w-6 text-text-secondary hover:text-status-green hover:bg-status-green/10 transition-opacity",
+												"h-6 w-6 text-text-secondary hover:text-status-green hover:bg-status-green/10",
 												isHovered ? "opacity-100" : "opacity-0",
 											)}
 											onMouseDown={stopEvent}
@@ -674,7 +674,7 @@ export function BoardCard({
 							</div>
 
 							{/* Task Title */}
-							<div className="mb-1">
+							<div className="mb-0.5">
 								{isEditingTitle ? (
 									<input
 										ref={titleInputRef}
@@ -685,13 +685,13 @@ export function BoardCard({
 										onMouseDown={(event) => {
 											event.stopPropagation();
 										}}
-										className="h-7 w-full rounded-md border border-border-focus bg-surface-2 px-2 text-sm font-medium text-text-primary focus:outline-none"
+										className="h-7 w-full rounded-md border border-border-focus bg-surface-2 px-2 text-sm font-semibold text-text-primary focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-border-focus"
 									/>
 								) : (
 									<p
 										className={cn(
-											"kb-line-clamp-2 m-0 font-medium text-[13px] text-text-primary leading-snug tracking-[-0.01em]",
-											isTrashCard && "line-through text-text-tertiary",
+											"kb-line-clamp-2 m-0 font-semibold text-[13px] text-text-primary leading-snug tracking-[-0.01em]",
+											isTrashCard && "line-through text-text-tertiary font-medium",
 										)}
 									>
 										{displayTitle}
@@ -701,12 +701,12 @@ export function BoardCard({
 
 							{/* Task Description */}
 							{displayDescription ? (
-								<div ref={descriptionContainerRef} className="mt-1">
+								<div ref={descriptionContainerRef} className="mt-0.5">
 									<p
 										ref={descriptionRef}
 										className={cn(
-											"text-[12px] leading-relaxed",
-											isTrashCard ? "text-text-tertiary" : "text-text-secondary/90",
+											"text-[12px] leading-[1.4]",
+											isTrashCard ? "text-text-tertiary" : "text-text-secondary",
 											!isDescriptionMeasured && !isDescriptionExpanded && "line-clamp-2",
 										)}
 										style={{
@@ -759,52 +759,51 @@ export function BoardCard({
 								</div>
 							) : null}
 
-							{/* Agent & Model Settings Pill */}
-							{taskAgentSettingsLabel ? (
-								<div className="mt-2">
-									<span
-										className={cn(
-											"inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium shadow-2xs",
-											isTrashCard
-												? "border-border text-text-tertiary bg-surface-1"
-												: "border-status-blue/25 bg-status-blue/10 text-status-blue",
-										)}
-									>
-										<Bot size={12} className="shrink-0" />
-										<span className="truncate">{taskAgentSettingsLabel}</span>
-									</span>
-								</div>
-							) : null}
-							{verifyStatus ? (
-								<div className="mt-1">
-									<Tooltip content={verifyTooltip}>
+							{taskAgentSettingsLabel || verifyStatus ? (
+								<div className="mt-1.5 flex flex-wrap items-center gap-1">
+									{taskAgentSettingsLabel ? (
 										<span
 											className={cn(
-												"inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs",
+												"inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-px text-[11px] font-medium",
 												isTrashCard
 													? "border-border text-text-tertiary bg-surface-1"
-													: verifyStatus.kind === "passed"
-														? "border-status-green/30 bg-status-green/10 text-status-green"
-														: verifyStatus.kind === "failed"
-															? "border-status-red/30 bg-status-red/10 text-status-red"
-															: "border-border text-text-tertiary bg-surface-1",
+													: "border-status-blue/25 bg-status-blue/10 text-status-blue",
 											)}
 										>
-											{verifyStatus.kind === "passed" ? (
-												<CheckCircle2 size={12} className="shrink-0" />
-											) : verifyStatus.kind === "failed" ? (
-												<AlertCircle size={12} className="shrink-0" />
-											) : null}
-											<span className="truncate">{verifyStatus.label}</span>
+											<Bot size={11} className="shrink-0" />
+											<span className="truncate">{taskAgentSettingsLabel}</span>
 										</span>
-									</Tooltip>
+									) : null}
+									{verifyStatus ? (
+										<Tooltip content={verifyTooltip}>
+											<span
+												className={cn(
+													"inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-px text-[11px] font-medium",
+													isTrashCard
+														? "border-border text-text-tertiary bg-surface-1"
+														: verifyStatus.kind === "passed"
+															? "border-status-green/30 bg-status-green/10 text-status-green"
+															: verifyStatus.kind === "failed"
+																? "border-status-red/30 bg-status-red/10 text-status-red"
+																: "border-border text-text-tertiary bg-surface-1",
+												)}
+											>
+												{verifyStatus.kind === "passed" ? (
+													<CheckCircle2 size={11} className="shrink-0" />
+												) : verifyStatus.kind === "failed" ? (
+													<AlertCircle size={11} className="shrink-0" />
+												) : null}
+												<span className="truncate">{verifyStatus.label}</span>
+											</span>
+										</Tooltip>
+									) : null}
 								</div>
 							) : null}
 
 							{/* Live Activity Row with Pulsing Radar Dot */}
 							{sessionActivity ? (
 								<div
-									className="flex items-center gap-2 mt-2 px-2 py-1 rounded-md bg-surface-1/70 border border-border/40"
+									className="flex items-center gap-1.5 mt-1.5 px-1.5 py-1 rounded-md bg-surface-1/80 border border-border/50"
 									style={{
 										color: isTrashCard ? SESSION_ACTIVITY_COLOR.muted : undefined,
 									}}
@@ -844,7 +843,7 @@ export function BoardCard({
 							{showWorkspaceStatus && reviewWorkspacePath ? (
 								<div
 									className={cn(
-										"flex items-center flex-wrap gap-1.5 mt-2 pt-2 border-t border-border/40 font-mono text-[11px]",
+										"flex items-center flex-wrap gap-1.5 mt-1.5 pt-1.5 border-t border-border/50 font-mono text-[11px]",
 										isTrashCard && "opacity-60",
 									)}
 								>
