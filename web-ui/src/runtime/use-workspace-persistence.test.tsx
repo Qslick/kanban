@@ -111,8 +111,12 @@ describe("useWorkspacePersistence conflict recovery", () => {
 		});
 
 		expect(persistWorkspaceState).toHaveBeenCalledTimes(1);
-		const firstCall = persistWorkspaceState.mock.calls.at(0);
-		expect(firstCall?.[0].payload.expectedRevision).toBe(10);
+		expect(persistWorkspaceState).toHaveBeenCalledWith(
+			expect.objectContaining({
+				workspaceId: "marketply",
+				payload: expect.objectContaining({ expectedRevision: 10 }),
+			}),
+		);
 		expect(onWorkspaceRevisionChange).not.toHaveBeenCalled();
 		expect(refetchWorkspaceState).toHaveBeenCalledTimes(1);
 
