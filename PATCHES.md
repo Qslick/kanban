@@ -24,6 +24,9 @@ Install this checkout with `npm run link`. Roll back to the published binary wit
 | Issue #473 | AND dependency auto-start: a Backlog card starts only when every linked Review prerequisite is Done |
 | #592 | Agent-agnostic per-task model and effort wiring. Prerequisite for Grok |
 | #603 unique commits | Grok Build CLI as a launch-supported runtime agent |
+| feat/and-cli-link | `task link --blocked-by`; `task show` / list `unfinishedPrerequisites` |
+| feat/agent-settings-launch | CLI `--agent-id` help includes grok; tests that card model/effort reach argv |
+| feat/ready-now-filter | Backlog "Ready now" toggle hides cards with unfinished AND blockers |
 
 ## Skipped
 
