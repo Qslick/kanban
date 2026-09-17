@@ -52,7 +52,11 @@ vi.mock("../../src/workspace/task-worktree-path.js", () => ({
 	normalizeTaskIdForWorktreePath: taskWorktreePathMocks.normalizeTaskIdForWorktreePath,
 }));
 
-import { ensureTaskWorktreeIfDoesntExist, removeTaskWorktreeSetupLock } from "../../src/workspace/task-worktree";
+import {
+	deleteTaskWorktree,
+	ensureTaskWorktreeIfDoesntExist,
+	removeTaskWorktreeSetupLock,
+} from "../../src/workspace/task-worktree";
 
 type ExecFileOptions = {
 	cwd?: string;
@@ -286,6 +290,259 @@ describe.sequential("task-worktree serialization", () => {
 			await expect(removeTaskWorktreeSetupLock(repoPath)).resolves.toBe(true);
 			expect(existsSync(lockPath)).toBe(false);
 			await expect(removeTaskWorktreeSetupLock(repoPath)).resolves.toBe(false);
+		} finally {
+			cleanup();
+		}
+	});
+});
+
+describe.sequential("task-worktree delete hygiene", () => {
+	beforeEach(() => {
+		childProcessMocks.execFile.mockReset();
+		childProcessMocks.execFilePromise.mockReset();
+		lockedFileSystemMocks.withLock.mockReset();
+		lockedFileSystemMocks.writeTextFileAtomic.mockReset();
+		workspaceStateMocks.getRuntimeHomePath.mockReset();
+		workspaceStateMocks.getTaskWorktreesHomePath.mockReset();
+		workspaceStateMocks.loadWorkspaceContext.mockReset();
+		taskWorktreePathMocks.getWorkspaceFolderLabelForWorktreePath.mockReset();
+		taskWorktreePathMocks.normalizeTaskIdForWorktreePath.mockReset();
+
+		let lockQueue = Promise.resolve();
+		lockedFileSystemMocks.withLock.mockImplementation(
+			async (_request: unknown, operation: () => Promise<unknown>) => {
+				const waitForTurn = lockQueue;
+				let releaseLock: () => void = () => {};
+				lockQueue = new Promise<void>((resolve) => {
+					releaseLock = resolve;
+				});
+				await waitForTurn;
+				try {
+					return await operation();
+				} finally {
+					releaseLock();
+				}
+			},
+		);
+		lockedFileSystemMocks.writeTextFileAtomic.mockResolvedValue(undefined);
+	});
+
+	afterEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("prunes git worktree registration after rm when remove fails", async () => {
+		const { path: sandboxRoot, cleanup } = createTempDir("kanban-task-worktree-delete-prune-");
+		try {
+			const repoPath = join(sandboxRoot, "repo");
+			const worktreesHomePath = join(sandboxRoot, "worktrees-home");
+			const runtimeHomePath = join(sandboxRoot, "runtime-home");
+			const taskId = "task-delete-prune";
+			mkdirSync(join(repoPath, ".git"), { recursive: true });
+			mkdirSync(runtimeHomePath, { recursive: true });
+			mkdirSync(worktreesHomePath, { recursive: true });
+
+			workspaceStateMocks.getRuntimeHomePath.mockReturnValue(runtimeHomePath);
+			workspaceStateMocks.getTaskWorktreesHomePath.mockReturnValue(worktreesHomePath);
+			taskWorktreePathMocks.getWorkspaceFolderLabelForWorktreePath.mockReturnValue("repo");
+			taskWorktreePathMocks.normalizeTaskIdForWorktreePath.mockImplementation((id: string) => id);
+
+			const worktreePath = join(worktreesHomePath, taskId, "repo");
+			mkdirSync(worktreePath, { recursive: true });
+			writeFileSync(join(worktreePath, "README.md"), "stale\n", "utf8");
+
+			const gitCommands: string[][] = [];
+			childProcessMocks.execFilePromise.mockImplementation(
+				async (_file: string, args: readonly string[], options?: ExecFileOptions) => {
+					const { cwd, command } = getCommandArgs(args, options);
+					gitCommands.push([cwd, ...command]);
+
+					if (command[0] === "rev-parse" && command[1] === "--git-common-dir") {
+						return { stdout: ".git\n", stderr: "" };
+					}
+					if (command[0] === "worktree" && command[1] === "remove") {
+						throw createGitError("fatal: working trees contain modified or untracked files");
+					}
+					if (command[0] === "worktree" && command[1] === "prune") {
+						expect(existsSync(worktreePath)).toBe(false);
+						return { stdout: "", stderr: "" };
+					}
+					if (command[0] === "worktree" && command[1] === "list") {
+						return { stdout: `worktree ${repoPath}\nHEAD abc\nbranch refs/heads/main\n`, stderr: "" };
+					}
+					throw createGitError(`Unhandled git command: ${command.join(" ")}`);
+				},
+			);
+
+			const deleted = await deleteTaskWorktree({ repoPath, taskId });
+			expect(deleted, JSON.stringify(deleted, null, 2)).toMatchObject({ ok: true, removed: true });
+			expect(existsSync(worktreePath)).toBe(false);
+
+			const pruneIndex = gitCommands.findIndex((command) => command[1] === "worktree" && command[2] === "prune");
+			const removeIndex = gitCommands.findIndex((command) => command[1] === "worktree" && command[2] === "remove");
+			expect(removeIndex).toBeGreaterThanOrEqual(0);
+			expect(pruneIndex).toBeGreaterThan(removeIndex);
+		} finally {
+			cleanup();
+		}
+	});
+
+	it("returns ok:false when git still lists the worktree after cleanup", async () => {
+		const { path: sandboxRoot, cleanup } = createTempDir("kanban-task-worktree-delete-listed-");
+		try {
+			const repoPath = join(sandboxRoot, "repo");
+			const worktreesHomePath = join(sandboxRoot, "worktrees-home");
+			const runtimeHomePath = join(sandboxRoot, "runtime-home");
+			const taskId = "task-still-listed";
+			mkdirSync(join(repoPath, ".git"), { recursive: true });
+			mkdirSync(runtimeHomePath, { recursive: true });
+			mkdirSync(worktreesHomePath, { recursive: true });
+
+			workspaceStateMocks.getRuntimeHomePath.mockReturnValue(runtimeHomePath);
+			workspaceStateMocks.getTaskWorktreesHomePath.mockReturnValue(worktreesHomePath);
+			taskWorktreePathMocks.getWorkspaceFolderLabelForWorktreePath.mockReturnValue("repo");
+			taskWorktreePathMocks.normalizeTaskIdForWorktreePath.mockImplementation((id: string) => id);
+
+			const worktreePath = join(worktreesHomePath, taskId, "repo");
+			mkdirSync(worktreePath, { recursive: true });
+
+			childProcessMocks.execFilePromise.mockImplementation(
+				async (_file: string, args: readonly string[], options?: ExecFileOptions) => {
+					const { command } = getCommandArgs(args, options);
+					if (command[0] === "rev-parse" && command[1] === "--git-common-dir") {
+						return { stdout: ".git\n", stderr: "" };
+					}
+					if (command[0] === "worktree" && command[1] === "remove") {
+						throw createGitError("fatal: cannot remove");
+					}
+					if (command[0] === "worktree" && command[1] === "prune") {
+						return { stdout: "", stderr: "" };
+					}
+					if (command[0] === "worktree" && command[1] === "list") {
+						return {
+							stdout: `worktree ${worktreePath}\nHEAD abc\ndetached\n`,
+							stderr: "",
+						};
+					}
+					throw createGitError(`Unhandled git command: ${command.join(" ")}`);
+				},
+			);
+
+			const deleted = await deleteTaskWorktree({ repoPath, taskId });
+			expect(deleted.ok).toBe(false);
+			expect(deleted.removed).toBe(true);
+			expect(deleted.error).toMatch(/still lists a worktree/i);
+		} finally {
+			cleanup();
+		}
+	});
+
+	it("removes a linked worktree index.lock before git worktree remove", async () => {
+		const { path: sandboxRoot, cleanup } = createTempDir("kanban-task-worktree-index-lock-");
+		try {
+			const repoPath = join(sandboxRoot, "repo");
+			const worktreesHomePath = join(sandboxRoot, "worktrees-home");
+			const runtimeHomePath = join(sandboxRoot, "runtime-home");
+			const taskId = "task-index-lock";
+			mkdirSync(join(repoPath, ".git", "worktrees", "repo"), { recursive: true });
+			mkdirSync(runtimeHomePath, { recursive: true });
+			mkdirSync(worktreesHomePath, { recursive: true });
+
+			workspaceStateMocks.getRuntimeHomePath.mockReturnValue(runtimeHomePath);
+			workspaceStateMocks.getTaskWorktreesHomePath.mockReturnValue(worktreesHomePath);
+			taskWorktreePathMocks.getWorkspaceFolderLabelForWorktreePath.mockReturnValue("repo");
+			taskWorktreePathMocks.normalizeTaskIdForWorktreePath.mockImplementation((id: string) => id);
+
+			const worktreePath = join(worktreesHomePath, taskId, "repo");
+			const linkedGitDir = join(repoPath, ".git", "worktrees", "repo");
+			mkdirSync(worktreePath, { recursive: true });
+			writeFileSync(join(worktreePath, ".git"), `gitdir: ${linkedGitDir}\n`, "utf8");
+			writeFileSync(join(linkedGitDir, "commondir"), "../..\n", "utf8");
+			const indexLockPath = join(linkedGitDir, "index.lock");
+			writeFileSync(indexLockPath, "", "utf8");
+
+			childProcessMocks.execFilePromise.mockImplementation(
+				async (_file: string, args: readonly string[], options?: ExecFileOptions) => {
+					const { command } = getCommandArgs(args, options);
+					if (command[0] === "rev-parse" && command[1] === "--git-common-dir") {
+						return { stdout: ".git\n", stderr: "" };
+					}
+					if (command[0] === "worktree" && command[1] === "remove") {
+						expect(existsSync(indexLockPath)).toBe(false);
+						return { stdout: "", stderr: "" };
+					}
+					if (command[0] === "worktree" && command[1] === "prune") {
+						return { stdout: "", stderr: "" };
+					}
+					if (command[0] === "worktree" && command[1] === "list") {
+						return { stdout: `worktree ${repoPath}\nHEAD abc\nbranch refs/heads/main\n`, stderr: "" };
+					}
+					throw createGitError(`Unhandled git command: ${command.join(" ")}`);
+				},
+			);
+
+			const deleted = await deleteTaskWorktree({ repoPath, taskId });
+			expect(deleted.ok).toBe(true);
+			expect(deleted.removed).toBe(true);
+			expect(existsSync(indexLockPath)).toBe(false);
+		} finally {
+			cleanup();
+		}
+	});
+
+	it("serializes concurrent deletes of the same worktree through the setup lock", async () => {
+		const { path: sandboxRoot, cleanup } = createTempDir("kanban-task-worktree-delete-lock-");
+		try {
+			const repoPath = join(sandboxRoot, "repo");
+			const worktreesHomePath = join(sandboxRoot, "worktrees-home");
+			const runtimeHomePath = join(sandboxRoot, "runtime-home");
+			const taskId = "task-delete-lock";
+			mkdirSync(join(repoPath, ".git"), { recursive: true });
+			mkdirSync(runtimeHomePath, { recursive: true });
+			mkdirSync(worktreesHomePath, { recursive: true });
+
+			workspaceStateMocks.getRuntimeHomePath.mockReturnValue(runtimeHomePath);
+			workspaceStateMocks.getTaskWorktreesHomePath.mockReturnValue(worktreesHomePath);
+			taskWorktreePathMocks.getWorkspaceFolderLabelForWorktreePath.mockReturnValue("repo");
+			taskWorktreePathMocks.normalizeTaskIdForWorktreePath.mockImplementation((id: string) => id);
+
+			const worktreePath = join(worktreesHomePath, taskId, "repo");
+			mkdirSync(worktreePath, { recursive: true });
+
+			let activeRemoves = 0;
+			let maxConcurrentRemoves = 0;
+			childProcessMocks.execFilePromise.mockImplementation(
+				async (_file: string, args: readonly string[], options?: ExecFileOptions) => {
+					const { command } = getCommandArgs(args, options);
+					if (command[0] === "rev-parse" && command[1] === "--git-common-dir") {
+						return { stdout: ".git\n", stderr: "" };
+					}
+					if (command[0] === "worktree" && command[1] === "remove") {
+						activeRemoves += 1;
+						maxConcurrentRemoves = Math.max(maxConcurrentRemoves, activeRemoves);
+						await new Promise((resolve) => {
+							setTimeout(resolve, 25);
+						});
+						activeRemoves -= 1;
+						return { stdout: "", stderr: "" };
+					}
+					if (command[0] === "worktree" && command[1] === "prune") {
+						return { stdout: "", stderr: "" };
+					}
+					if (command[0] === "worktree" && command[1] === "list") {
+						return { stdout: `worktree ${repoPath}\nHEAD abc\nbranch refs/heads/main\n`, stderr: "" };
+					}
+					throw createGitError(`Unhandled git command: ${command.join(" ")}`);
+				},
+			);
+
+			const [first, second] = await Promise.all([
+				deleteTaskWorktree({ repoPath, taskId }),
+				deleteTaskWorktree({ repoPath, taskId }),
+			]);
+			expect(first.ok).toBe(true);
+			expect(second.ok).toBe(true);
+			expect(maxConcurrentRemoves).toBe(1);
 		} finally {
 			cleanup();
 		}

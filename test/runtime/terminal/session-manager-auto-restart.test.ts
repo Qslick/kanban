@@ -83,6 +83,126 @@ describe("TerminalSessionManager auto-restart", () => {
 		expect(manager.getSummary("task-1")?.pid).toBe(222);
 	});
 
+	it("runs session cleanup on stop and interrupt-all", async () => {
+		const cleanup = vi.fn(async () => {});
+		prepareAgentLaunchMock.mockResolvedValue({
+			binary: "codex",
+			args: [],
+			env: {},
+			cleanup,
+		});
+		const spawnedSessions: Array<ReturnType<typeof createMockPtySession>> = [];
+		ptySessionSpawnMock.mockImplementation((request: MockSpawnRequest) => {
+			const session = createMockPtySession(111, request);
+			spawnedSessions.push(session);
+			return session;
+		});
+
+		const manager = new TerminalSessionManager();
+		await manager.startTaskSession({
+			taskId: "task-cleanup",
+			agentId: "codex",
+			binary: "codex",
+			args: [],
+			cwd: "/tmp/task-cleanup",
+			prompt: "Fix the bug",
+		});
+
+		manager.stopTaskSession("task-cleanup");
+		expect(cleanup).toHaveBeenCalledTimes(1);
+		expect(spawnedSessions[0]?.stop).toHaveBeenCalled();
+
+		cleanup.mockClear();
+		prepareAgentLaunchMock.mockResolvedValue({
+			binary: "codex",
+			args: [],
+			env: {},
+			cleanup,
+		});
+		const manager2 = new TerminalSessionManager();
+		await manager2.startTaskSession({
+			taskId: "task-interrupt",
+			agentId: "codex",
+			binary: "codex",
+			args: [],
+			cwd: "/tmp/task-interrupt",
+			prompt: "Fix the bug",
+		});
+		manager2.markInterruptedAndStopAll();
+		expect(cleanup).toHaveBeenCalledTimes(1);
+	});
+
+	it("does not restart an attached agent session after markInterruptedAndStopAll", async () => {
+		const spawnedSessions: Array<ReturnType<typeof createMockPtySession>> = [];
+		ptySessionSpawnMock.mockImplementation((request: MockSpawnRequest) => {
+			const session = createMockPtySession(111, request);
+			spawnedSessions.push(session);
+			return session;
+		});
+
+		const manager = new TerminalSessionManager();
+		manager.attach("task-1", {
+			onState: vi.fn(),
+			onOutput: vi.fn(),
+			onExit: vi.fn(),
+		});
+
+		await manager.startTaskSession({
+			taskId: "task-1",
+			agentId: "codex",
+			binary: "codex",
+			args: [],
+			cwd: "/tmp/task-1",
+			prompt: "Fix the bug",
+		});
+
+		manager.markInterruptedAndStopAll();
+		spawnedSessions[0]?.triggerExit(130);
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(ptySessionSpawnMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("dispose stops sessions, drops listeners, and refuses new starts", async () => {
+		const spawnedSessions: Array<ReturnType<typeof createMockPtySession>> = [];
+		ptySessionSpawnMock.mockImplementation((request: MockSpawnRequest) => {
+			const session = createMockPtySession(111, request);
+			spawnedSessions.push(session);
+			return session;
+		});
+
+		const manager = new TerminalSessionManager();
+		const onOutput = vi.fn();
+		manager.attach("task-1", {
+			onState: vi.fn(),
+			onOutput,
+			onExit: vi.fn(),
+		});
+		await manager.startTaskSession({
+			taskId: "task-1",
+			agentId: "codex",
+			binary: "codex",
+			args: [],
+			cwd: "/tmp/task-1",
+			prompt: "Fix the bug",
+		});
+
+		manager.dispose();
+		expect(spawnedSessions[0]?.stop).toHaveBeenCalledWith({ interrupted: true });
+		expect(manager.getSummary("task-1")).toBeNull();
+		await expect(
+			manager.startTaskSession({
+				taskId: "task-1",
+				agentId: "codex",
+				binary: "codex",
+				args: [],
+				cwd: "/tmp/task-1",
+				prompt: "Fix the bug",
+			}),
+		).rejects.toThrow("disposed");
+	});
+
 	it("does not restart an attached agent session after an explicit stop", async () => {
 		const spawnedSessions: Array<ReturnType<typeof createMockPtySession>> = [];
 		ptySessionSpawnMock.mockImplementation((request: MockSpawnRequest) => {

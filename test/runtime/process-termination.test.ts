@@ -3,9 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import { terminateProcessForTimeout } from "../../src/server/process-termination";
 
 describe("terminateProcessForTimeout", () => {
-	it("uses SIGTERM on non-windows platforms", () => {
+	it("SIGTERMs the process group then SIGKILLs after the wait on non-windows platforms", () => {
 		const kill = vi.fn(() => true);
 		const killProcessTree = vi.fn();
+		const killProcessGroup = vi.fn();
+		const scheduled: Array<() => void> = [];
 
 		terminateProcessForTimeout(
 			{
@@ -15,16 +17,29 @@ describe("terminateProcessForTimeout", () => {
 			{
 				platform: "linux",
 				killProcessTree,
+				killProcessGroup,
+				scheduleEscalation: (callback) => {
+					scheduled.push(callback);
+				},
 			},
 		);
 
 		expect(kill).toHaveBeenCalledWith("SIGTERM");
-		expect(killProcessTree).not.toHaveBeenCalled();
+		expect(killProcessGroup).toHaveBeenCalledWith(123, "SIGTERM");
+		expect(killProcessTree).toHaveBeenCalledWith(123, "SIGTERM", expect.any(Function));
+		expect(scheduled).toHaveLength(1);
+
+		scheduled[0]?.();
+
+		expect(kill).toHaveBeenCalledWith("SIGKILL");
+		expect(killProcessGroup).toHaveBeenCalledWith(123, "SIGKILL");
+		expect(killProcessTree).toHaveBeenCalledWith(123, "SIGKILL", expect.any(Function));
 	});
 
-	it("uses default kill and taskkill tree on windows", () => {
+	it("uses default kill and taskkill tree on windows, then escalates to SIGKILL", () => {
 		const kill = vi.fn(() => true);
 		const killProcessTree = vi.fn();
+		const scheduled: Array<() => void> = [];
 
 		terminateProcessForTimeout(
 			{
@@ -34,16 +49,25 @@ describe("terminateProcessForTimeout", () => {
 			{
 				platform: "win32",
 				killProcessTree,
+				scheduleEscalation: (callback) => {
+					scheduled.push(callback);
+				},
 			},
 		);
 
 		expect(kill).toHaveBeenCalledWith();
 		expect(killProcessTree).toHaveBeenCalledWith(456, "SIGTERM", expect.any(Function));
+		expect(scheduled).toHaveLength(1);
+
+		scheduled[0]?.();
+
+		expect(killProcessTree).toHaveBeenCalledWith(456, "SIGKILL", expect.any(Function));
 	});
 
 	it("skips taskkill tree when pid is missing on windows", () => {
 		const kill = vi.fn(() => true);
 		const killProcessTree = vi.fn();
+		const scheduled: Array<() => void> = [];
 
 		terminateProcessForTimeout(
 			{
@@ -52,10 +76,15 @@ describe("terminateProcessForTimeout", () => {
 			{
 				platform: "win32",
 				killProcessTree,
+				scheduleEscalation: (callback) => {
+					scheduled.push(callback);
+				},
 			},
 		);
 
 		expect(kill).toHaveBeenCalledWith();
+		expect(killProcessTree).not.toHaveBeenCalled();
+		scheduled[0]?.();
 		expect(killProcessTree).not.toHaveBeenCalled();
 	});
 });

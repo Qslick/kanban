@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -683,4 +683,93 @@ describe.sequential("task-worktree integration", () => {
 			}
 		});
 	});
+
+	it("unregisters a deleted worktree even when index.lock is present", async () => {
+		await withTemporaryHome(async () => {
+			const { path: sandboxRoot, cleanup } = createTempDir("kanban-task-worktree-index-lock-int-");
+			try {
+				const repoPath = join(sandboxRoot, "repo");
+				mkdirSync(repoPath, { recursive: true });
+
+				runGit(repoPath, ["init"]);
+				runGit(repoPath, ["config", "user.name", "Kanban Test"]);
+				runGit(repoPath, ["config", "user.email", "kanban-test@example.com"]);
+				writeFileSync(join(repoPath, "README.md"), "hello\n", "utf8");
+				runGit(repoPath, ["add", "README.md"]);
+				runGit(repoPath, ["commit", "-m", "init"]);
+
+				const taskId = `task-index-lock-${Date.now()}`;
+				const ensured = await ensureTaskWorktreeIfDoesntExist({
+					cwd: repoPath,
+					taskId,
+					baseRef: "HEAD",
+				});
+				expect(ensured.ok).toBe(true);
+				if (!ensured.ok || !ensured.path) {
+					throw new Error("Task worktree was not created");
+				}
+
+				const gitFile = readFileSync(join(ensured.path, ".git"), "utf8");
+				const gitDirMatch = /^\s*gitdir:\s*(.+)\s*$/m.exec(gitFile);
+				const rawGitDir = gitDirMatch?.[1]?.trim();
+				expect(rawGitDir).toBeTruthy();
+				if (!rawGitDir) {
+					throw new Error("Expected linked worktree gitdir");
+				}
+				const gitDir = isAbsolute(rawGitDir) ? rawGitDir : join(ensured.path, rawGitDir);
+				writeFileSync(join(gitDir, "index.lock"), "", "utf8");
+
+				const deleted = await deleteTaskWorktree({
+					repoPath,
+					taskId,
+				});
+				expect(deleted.ok).toBe(true);
+				expect(deleted.removed).toBe(true);
+				expect(existsSync(ensured.path)).toBe(false);
+				expect(runGit(repoPath, ["worktree", "list", "--porcelain"])).not.toContain(ensured.path);
+			} finally {
+				cleanup();
+			}
+		});
+	}, 30_000);
+
+	it("serializes concurrent deletes of the same worktree", async () => {
+		await withTemporaryHome(async () => {
+			const { path: sandboxRoot, cleanup } = createTempDir("kanban-task-worktree-concurrent-delete-");
+			try {
+				const repoPath = join(sandboxRoot, "repo");
+				mkdirSync(repoPath, { recursive: true });
+
+				runGit(repoPath, ["init"]);
+				runGit(repoPath, ["config", "user.name", "Kanban Test"]);
+				runGit(repoPath, ["config", "user.email", "kanban-test@example.com"]);
+				writeFileSync(join(repoPath, "README.md"), "hello\n", "utf8");
+				runGit(repoPath, ["add", "README.md"]);
+				runGit(repoPath, ["commit", "-m", "init"]);
+
+				const taskId = `task-concurrent-delete-${Date.now()}`;
+				const ensured = await ensureTaskWorktreeIfDoesntExist({
+					cwd: repoPath,
+					taskId,
+					baseRef: "HEAD",
+				});
+				expect(ensured.ok).toBe(true);
+				if (!ensured.ok || !ensured.path) {
+					throw new Error("Task worktree was not created");
+				}
+
+				const [first, second] = await Promise.all([
+					deleteTaskWorktree({ repoPath, taskId }),
+					deleteTaskWorktree({ repoPath, taskId }),
+				]);
+				expect(first.ok).toBe(true);
+				expect(second.ok).toBe(true);
+				expect(first.removed || second.removed).toBe(true);
+				expect(existsSync(ensured.path)).toBe(false);
+				expect(runGit(repoPath, ["worktree", "list", "--porcelain"])).not.toContain(ensured.path);
+			} finally {
+				cleanup();
+			}
+		});
+	}, 30_000);
 });

@@ -186,4 +186,71 @@ describe.sequential("shutdown coordinator integration", () => {
 			}
 		});
 	}, 30_000);
+
+	it("still stops live sessions when skipSessionCleanup is set, without trashing cards", async () => {
+		await withTemporaryHome(async () => {
+			const { path: sandboxRoot, cleanup } = createTempDir("kanban-shutdown-skip-");
+			try {
+				const managedProjectPath = join(sandboxRoot, "managed-project");
+				mkdirSync(managedProjectPath, { recursive: true });
+				initGitRepository(managedProjectPath);
+
+				const managedInitial = await loadWorkspaceState(managedProjectPath);
+				await saveWorkspaceState(managedProjectPath, {
+					board: createBoard({
+						inProgress: ["keep-running"],
+						review: ["keep-review"],
+					}),
+					sessions: {
+						"keep-running": createSession("keep-running", "running"),
+					},
+					expectedRevision: managedInitial.revision,
+				});
+
+				let didCloseRuntimeServer = false;
+				let stopAllCalls = 0;
+				const managedTerminalManager = {
+					markInterruptedAndStopAll: () => {
+						stopAllCalls += 1;
+						return [createSession("keep-running", "running")];
+					},
+					listSummaries: () => [createSession("keep-running", "running")],
+					getSummary: (taskId: string) =>
+						taskId === "keep-running" ? createSession("keep-running", "running") : null,
+				} as unknown as TerminalSessionManager;
+
+				await shutdownRuntimeServer({
+					workspaceRegistry: {
+						listManagedWorkspaces: () => [
+							{
+								workspaceId: "managed-project",
+								workspacePath: managedProjectPath,
+								terminalManager: managedTerminalManager,
+							},
+						],
+					},
+					warn: () => {},
+					closeRuntimeServer: async () => {
+						didCloseRuntimeServer = true;
+					},
+					skipSessionCleanup: true,
+				});
+
+				expect(didCloseRuntimeServer).toBe(true);
+				expect(stopAllCalls).toBe(1);
+
+				const managedAfter = await loadWorkspaceState(managedProjectPath);
+				const inProgress =
+					managedAfter.board.columns.find((column) => column.id === "in_progress")?.cards.map((card) => card.id) ??
+					[];
+				const review =
+					managedAfter.board.columns.find((column) => column.id === "review")?.cards.map((card) => card.id) ?? [];
+				expect(inProgress).toEqual(["keep-running"]);
+				expect(review).toEqual(["keep-review"]);
+				expect(managedAfter.sessions["keep-running"]?.state).toBe("running");
+			} finally {
+				cleanup();
+			}
+		});
+	}, 30_000);
 });

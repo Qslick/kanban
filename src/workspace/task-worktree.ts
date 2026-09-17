@@ -499,16 +499,94 @@ async function prepareNewTaskWorktree(repoPath: string, worktreePath: string): P
 	}
 }
 
-async function removeTaskWorktreeInternal(repoPath: string, worktreePath: string): Promise<boolean> {
-	const existed = await pathExists(worktreePath);
-	const removeResult = await runGit(repoPath, ["worktree", "remove", "--force", worktreePath]);
-	if (!removeResult.ok) {
-		// If remove failed (e.g. worktree in bad state), prune stale registrations
-		// so git doesn't think the path is still registered after we rm it.
-		await runGit(repoPath, ["worktree", "prune"]);
+function normalizeWorktreePathForCompare(path: string): string {
+	const normalized = path.replaceAll("\\", "/").replace(/\/+$/g, "");
+	return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+function porcelainListsWorktree(stdout: string, worktreePath: string): boolean {
+	const wanted = normalizeWorktreePathForCompare(worktreePath);
+	for (const rawLine of stdout.split(/\r?\n/)) {
+		if (!rawLine.startsWith("worktree ")) {
+			continue;
+		}
+		const listed = normalizeWorktreePathForCompare(rawLine.slice("worktree ".length).trim());
+		if (listed === wanted) {
+			return true;
+		}
 	}
+	return false;
+}
+
+async function resolveWorktreeGitDir(worktreePath: string): Promise<string | null> {
+	const gitPath = join(worktreePath, ".git");
+	try {
+		const gitStat = await lstat(gitPath);
+		if (gitStat.isDirectory()) {
+			return gitPath;
+		}
+		if (!gitStat.isFile()) {
+			return null;
+		}
+		const content = await readFile(gitPath, "utf8");
+		const match = /^\s*gitdir:\s*(.+)\s*$/m.exec(content);
+		const gitDir = match?.[1]?.trim();
+		if (!gitDir) {
+			return null;
+		}
+		return isAbsolute(gitDir) ? gitDir : join(worktreePath, gitDir);
+	} catch {
+		return null;
+	}
+}
+
+async function removeStaleWorktreeIndexLock(worktreePath: string): Promise<void> {
+	const gitDir = await resolveWorktreeGitDir(worktreePath);
+	if (!gitDir) {
+		return;
+	}
+	// Linked worktrees always have `commondir`. Never touch a regular repo's index.lock.
+	if (!(await pathExists(join(gitDir, "commondir")))) {
+		return;
+	}
+	await rm(join(gitDir, "index.lock"), { force: true });
+}
+
+interface RemoveTaskWorktreeResult {
+	existed: boolean;
+	removed: boolean;
+	error?: string;
+}
+
+async function removeTaskWorktreeInternal(repoPath: string, worktreePath: string): Promise<RemoveTaskWorktreeResult> {
+	const existed = await pathExists(worktreePath);
+	await removeStaleWorktreeIndexLock(worktreePath);
+	await runGit(repoPath, ["worktree", "remove", "--force", worktreePath]);
 	await rm(worktreePath, { recursive: true, force: true });
-	return existed;
+	// Prune after rm. Pruning while the directory still exists leaves a stale
+	// registration ("missing but already registered") on the next add.
+	await runGit(repoPath, ["worktree", "prune"]);
+	const stillExists = await pathExists(worktreePath);
+	const listResult = await runGit(repoPath, ["worktree", "list", "--porcelain"]);
+	const stillRegistered = listResult.ok && porcelainListsWorktree(listResult.stdout, worktreePath);
+	if (stillExists) {
+		return {
+			existed,
+			removed: false,
+			error: `Could not delete task worktree directory at ${worktreePath}.`,
+		};
+	}
+	if (stillRegistered) {
+		return {
+			existed,
+			removed: existed,
+			error: `Git still lists a worktree at ${worktreePath} after cleanup.`,
+		};
+	}
+	return {
+		existed,
+		removed: existed,
+	};
 }
 
 async function pruneEmptyParents(rootPath: string, fromPath: string): Promise<void> {
@@ -611,6 +689,7 @@ export async function ensureTaskWorktreeIfDoesntExist(options: {
 			await mkdir(dirname(worktreePath), { recursive: true });
 			const addResult = await runGit(context.repoPath, ["worktree", "add", "--detach", worktreePath, baseCommit]);
 			if (!addResult.ok) {
+				await removeTaskWorktreeInternal(context.repoPath, worktreePath).catch(() => {});
 				if (!storedPatch) {
 					return {
 						ok: false,
@@ -665,32 +744,41 @@ export async function deleteTaskWorktree(options: {
 		const taskId = normalizeTaskIdForWorktreePath(options.taskId);
 		const rootPath = getWorktreesBaseRootPath();
 		const worktreePath = getTaskWorktreePath(options.repoPath, taskId);
-		if (!(await pathExists(worktreePath))) {
-			await deleteTaskPatchFiles(taskId);
+		return await withTaskWorktreeSetupLock(options.repoPath, async () => {
+			if (!(await pathExists(worktreePath))) {
+				await deleteTaskPatchFiles(taskId);
+				await pruneEmptyParents(rootPath, dirname(worktreePath));
+				return {
+					ok: true,
+					removed: false,
+				};
+			}
+
+			try {
+				await captureTaskPatch({
+					repoPath: options.repoPath,
+					taskId,
+					worktreePath,
+				});
+			} catch {
+				// Patch capture is best-effort. A corrupted or partially-created
+				// worktree (e.g. plain directory, no git init) should still be removed.
+			}
+			const removed = await removeTaskWorktreeInternal(options.repoPath, worktreePath);
 			await pruneEmptyParents(rootPath, dirname(worktreePath));
+			if (removed.error) {
+				return {
+					ok: false,
+					removed: removed.removed,
+					error: removed.error,
+				};
+			}
+
 			return {
 				ok: true,
-				removed: false,
+				removed: removed.removed,
 			};
-		}
-
-		try {
-			await captureTaskPatch({
-				repoPath: options.repoPath,
-				taskId,
-				worktreePath,
-			});
-		} catch {
-			// Patch capture is best-effort. A corrupted or partially-created
-			// worktree (e.g. plain directory, no git init) should still be removed.
-		}
-		const removed = await removeTaskWorktreeInternal(options.repoPath, worktreePath);
-		await pruneEmptyParents(rootPath, dirname(worktreePath));
-
-		return {
-			ok: true,
-			removed,
-		};
+		});
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		return {
