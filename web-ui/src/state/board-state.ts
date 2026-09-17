@@ -17,6 +17,7 @@ import {
 	type TaskAutoReviewMode,
 	type TaskImage,
 	type TaskPendingGitAction,
+	type TaskVerifyResult,
 } from "@/types";
 
 export interface TaskDraft {
@@ -140,6 +141,25 @@ function normalizeTaskAgentSettings(input: {
 	};
 }
 
+function normalizeTaskVerifyResult(rawResult: unknown): TaskVerifyResult | undefined {
+	if (!rawResult || typeof rawResult !== "object") {
+		return undefined;
+	}
+	const result = rawResult as {
+		ok?: unknown;
+		output?: unknown;
+		recordedAt?: unknown;
+	};
+	if (typeof result.ok !== "boolean" || typeof result.recordedAt !== "number") {
+		return undefined;
+	}
+	return {
+		ok: result.ok,
+		recordedAt: result.recordedAt,
+		...(typeof result.output === "string" ? { output: result.output } : {}),
+	};
+}
+
 function normalizeTaskPendingGitAction(rawPending: unknown): TaskPendingGitAction | undefined {
 	if (!rawPending || typeof rawPending !== "object") {
 		return undefined;
@@ -193,6 +213,8 @@ function normalizeCard(rawCard: unknown): BoardCard | null {
 		createdAt?: unknown;
 		updatedAt?: unknown;
 		pendingGitAction?: unknown;
+		verifyCommand?: unknown;
+		verifyResult?: unknown;
 	};
 	const prompt = typeof card.prompt === "string" ? card.prompt.trim() : "";
 	if (!prompt) {
@@ -215,6 +237,8 @@ function normalizeCard(rawCard: unknown): BoardCard | null {
 
 	const now = Date.now();
 	const pendingGitAction = normalizeTaskPendingGitAction(card.pendingGitAction);
+	const verifyCommand = typeof card.verifyCommand === "string" ? card.verifyCommand.trim() : "";
+	const verifyResult = verifyCommand ? normalizeTaskVerifyResult(card.verifyResult) : undefined;
 
 	return {
 		id: typeof card.id === "string" && card.id ? card.id : createShortTaskId(createBrowserUuid),
@@ -232,6 +256,8 @@ function normalizeCard(rawCard: unknown): BoardCard | null {
 		createdAt: typeof card.createdAt === "number" ? card.createdAt : now,
 		updatedAt: typeof card.updatedAt === "number" ? card.updatedAt : now,
 		...(pendingGitAction !== undefined ? { pendingGitAction } : {}),
+		...(verifyCommand ? { verifyCommand } : {}),
+		...(verifyResult ? { verifyResult } : {}),
 	};
 }
 

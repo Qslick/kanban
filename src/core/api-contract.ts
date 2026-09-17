@@ -144,6 +144,13 @@ export const runtimeTaskPendingGitActionSchema = z.object({
 });
 export type RuntimeTaskPendingGitAction = z.infer<typeof runtimeTaskPendingGitActionSchema>;
 
+export const runtimeTaskVerifyResultSchema = z.object({
+	ok: z.boolean(),
+	output: z.string().optional(),
+	recordedAt: z.number(),
+});
+export type RuntimeTaskVerifyResult = z.infer<typeof runtimeTaskVerifyResultSchema>;
+
 export const runtimeBoardCardSchema = z
 	.object({
 		id: z.string(),
@@ -163,6 +170,8 @@ export const runtimeBoardCardSchema = z
 		createdAt: z.number(),
 		updatedAt: z.number(),
 		pendingGitAction: runtimeTaskPendingGitActionSchema.nullable().optional(),
+		verifyCommand: z.string().optional(),
+		verifyResult: runtimeTaskVerifyResultSchema.optional(),
 	})
 	.transform(
 		({

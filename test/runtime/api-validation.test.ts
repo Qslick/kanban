@@ -142,3 +142,64 @@ describe("runtimeBoardCardSchema pendingGitAction", () => {
 		).toThrow();
 	});
 });
+
+describe("runtimeBoardCardSchema verifyCommand and verifyResult", () => {
+	const legacyCard = {
+		id: "task-1",
+		prompt: "Do the thing",
+		startInPlanMode: false,
+		baseRef: "main",
+		createdAt: 1,
+		updatedAt: 2,
+	};
+
+	it("parses legacy cards without verify fields unchanged", () => {
+		const parsed = runtimeBoardCardSchema.parse(legacyCard);
+		expect(parsed.verifyCommand).toBeUndefined();
+		expect(parsed.verifyResult).toBeUndefined();
+	});
+
+	it("round-trips a verify command and last result", () => {
+		const parsed = runtimeBoardCardSchema.parse({
+			...legacyCard,
+			verifyCommand: "npm test",
+			verifyResult: {
+				ok: true,
+				output: "all tests passed",
+				recordedAt: 99,
+			},
+		});
+		expect(parsed.verifyCommand).toBe("npm test");
+		expect(parsed.verifyResult).toEqual({
+			ok: true,
+			output: "all tests passed",
+			recordedAt: 99,
+		});
+	});
+
+	it("parses a failed verify result without output", () => {
+		const parsed = runtimeBoardCardSchema.parse({
+			...legacyCard,
+			verifyCommand: "npm test",
+			verifyResult: {
+				ok: false,
+				recordedAt: 50,
+			},
+		});
+		expect(parsed.verifyResult).toEqual({
+			ok: false,
+			recordedAt: 50,
+		});
+	});
+
+	it("rejects a verify result missing recordedAt", () => {
+		expect(() =>
+			runtimeBoardCardSchema.parse({
+				...legacyCard,
+				verifyResult: {
+					ok: true,
+				},
+			}),
+		).toThrow();
+	});
+});

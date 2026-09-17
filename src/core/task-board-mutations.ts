@@ -8,10 +8,12 @@ import type {
 	RuntimeTaskAutoReviewMode,
 	RuntimeTaskImage,
 	RuntimeTaskPendingGitAction,
+	RuntimeTaskVerifyResult,
 } from "./api-contract";
 import { cloneRuntimeTaskAgentSettings } from "./task-agent-settings";
 import { createUniqueTaskId } from "./task-id";
 import { resolveTaskTitle } from "./task-title";
+import { cloneVerifyResult, normalizeVerifyCommand } from "./task-verification";
 
 /**
  * How long a persisted pending git action stays armed before it is treated as
@@ -36,6 +38,7 @@ export interface RuntimeCreateTaskInput {
 	agentId?: RuntimeAgentId;
 	agentSettings?: RuntimeTaskAgentSettings;
 	baseRef: string;
+	verifyCommand?: string;
 }
 
 export interface RuntimeUpdateTaskInput {
@@ -48,6 +51,7 @@ export interface RuntimeUpdateTaskInput {
 	agentId?: RuntimeAgentId | null;
 	agentSettings?: RuntimeTaskAgentSettings | null;
 	baseRef: string;
+	verifyCommand?: string | null;
 }
 
 function normalizeTaskAutoReviewMode(value: RuntimeTaskAutoReviewMode | null | undefined): RuntimeTaskAutoReviewMode {
@@ -305,6 +309,7 @@ export function addTaskToColumn(
 	if (explicitTaskId && existingIds.has(explicitTaskId)) {
 		throw new Error(`Task "${explicitTaskId}" already exists.`);
 	}
+	const verifyCommand = normalizeVerifyCommand(input.verifyCommand);
 	const task: RuntimeBoardCard = {
 		id: explicitTaskId || createUniqueTaskId(existingIds, randomUuid),
 		title: resolveTaskTitle(input.title, prompt),
@@ -318,6 +323,7 @@ export function addTaskToColumn(
 			? { agentSettings: cloneRuntimeTaskAgentSettings(input.agentSettings) }
 			: {}),
 		baseRef,
+		...(verifyCommand ? { verifyCommand } : {}),
 		createdAt: now,
 		updatedAt: now,
 	};
@@ -648,6 +654,11 @@ export function updateTask(
 				return card;
 			}
 			columnUpdated = true;
+			const nextVerifyCommand =
+				input.verifyCommand === undefined
+					? normalizeVerifyCommand(card.verifyCommand)
+					: normalizeVerifyCommand(input.verifyCommand);
+			const verifyCommandUnchanged = nextVerifyCommand === normalizeVerifyCommand(card.verifyCommand);
 			updatedTask = {
 				...card,
 				title: resolveTaskTitle(input.title, prompt),
@@ -664,6 +675,59 @@ export function updateTask(
 							? undefined
 							: cloneRuntimeTaskAgentSettings(input.agentSettings),
 				baseRef,
+				verifyCommand: nextVerifyCommand,
+				verifyResult: verifyCommandUnchanged ? cloneVerifyResult(card.verifyResult) : undefined,
+				updatedAt: now,
+			};
+			return updatedTask;
+		});
+		return columnUpdated ? { ...column, cards } : column;
+	});
+
+	if (!updatedTask) {
+		return {
+			board,
+			task: null,
+			updated: false,
+		};
+	}
+
+	return {
+		board: {
+			...board,
+			columns,
+		},
+		task: updatedTask,
+		updated: true,
+	};
+}
+
+export function recordTaskVerifyResult(
+	board: RuntimeBoardData,
+	taskId: string,
+	result: RuntimeTaskVerifyResult,
+	now: number = Date.now(),
+): RuntimeUpdateTaskResult {
+	const normalizedTaskId = taskId.trim();
+	if (!normalizedTaskId) {
+		return {
+			board,
+			task: null,
+			updated: false,
+		};
+	}
+
+	let updatedTask: RuntimeBoardCard | null = null;
+	const columns = board.columns.map((column) => {
+		let columnUpdated = false;
+		const cards = column.cards.map((card) => {
+			if (card.id !== normalizedTaskId) {
+				return card;
+			}
+			columnUpdated = true;
+			updatedTask = {
+				...card,
+				verifyResult: cloneVerifyResult(result),
 				updatedAt: now,
 			};
 			return updatedTask;

@@ -568,6 +568,43 @@ describe("board dependency state", () => {
 		]);
 	});
 
+	it("preserves verifyCommand and verifyResult when normalizing a board", () => {
+		const rawBoard = {
+			columns: [
+				{
+					id: "backlog",
+					cards: [
+						{
+							id: "v1",
+							prompt: "Verified task",
+							startInPlanMode: false,
+							baseRef: "main",
+							verifyCommand: "npm test",
+							verifyResult: {
+								ok: true,
+								output: "ok",
+								recordedAt: 11,
+							},
+						},
+					],
+				},
+				{ id: "in_progress", cards: [] },
+				{ id: "review", cards: [] },
+				{ id: "trash", cards: [] },
+			],
+			dependencies: [],
+		};
+
+		const normalized = normalizeBoardData(rawBoard);
+		const card = normalized?.columns.find((column) => column.id === "backlog")?.cards[0];
+		expect(card?.verifyCommand).toBe("npm test");
+		expect(card?.verifyResult).toEqual({
+			ok: true,
+			output: "ok",
+			recordedAt: 11,
+		});
+	});
+
 	it("disables auto-review settings for a task", () => {
 		let board = createInitialBoardData();
 		board = addTaskToColumn(board, "review", {

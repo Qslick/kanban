@@ -6,6 +6,7 @@ import type {
 	RuntimeTaskAutoReviewMode,
 	RuntimeTaskImage,
 	RuntimeTaskPendingGitAction,
+	RuntimeTaskVerifyResult,
 } from "@/runtime/types";
 
 export { isPendingGitActionStale, PENDING_GIT_ACTION_STALE_AFTER_MS };
@@ -40,6 +41,25 @@ export function getTaskAutoReviewCancelButtonLabel(mode: TaskAutoReviewMode | nu
 }
 
 export type TaskPendingGitAction = RuntimeTaskPendingGitAction;
+export type TaskVerifyResult = RuntimeTaskVerifyResult;
+
+export type TaskVerifyStatusKind = "passed" | "failed" | "pending";
+
+export function getTaskVerifyStatus(
+	card: Pick<BoardCard, "verifyCommand" | "verifyResult">,
+): { kind: TaskVerifyStatusKind; label: string } | null {
+	const command = card.verifyCommand?.trim();
+	if (!command) {
+		return null;
+	}
+	if (card.verifyResult?.ok === true) {
+		return { kind: "passed", label: "Verify passed" };
+	}
+	if (card.verifyResult?.ok === false) {
+		return { kind: "failed", label: "Verify failed" };
+	}
+	return { kind: "pending", label: "Verify pending" };
+}
 
 export interface BoardCard {
 	id: string;
@@ -55,6 +75,8 @@ export interface BoardCard {
 	createdAt: number;
 	updatedAt: number;
 	pendingGitAction?: TaskPendingGitAction | null;
+	verifyCommand?: string;
+	verifyResult?: TaskVerifyResult;
 }
 
 export interface BoardColumn {

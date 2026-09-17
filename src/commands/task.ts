@@ -11,6 +11,7 @@ import type {
 	RuntimeWorkspaceStateResponse,
 } from "../core/api-contract";
 import { runtimeAgentIdSchema } from "../core/api-contract";
+import { runVerifyCommandInWorktree } from "../core/run-verify-command";
 import { buildKanbanRuntimeUrl, getKanbanRuntimeOrigin, getRuntimeFetch } from "../core/runtime-endpoint";
 import { cloneRuntimeTaskAgentSettings } from "../core/task-agent-settings";
 import {
@@ -21,10 +22,12 @@ import {
 	getUnfinishedPrerequisiteTaskIds,
 	moveTaskToColumn,
 	type RuntimeAddTaskDependencyResult,
+	recordTaskVerifyResult,
 	removeTaskDependency,
 	trashTaskAndGetReadyLinkedTaskIds,
 	updateTask,
 } from "../core/task-board-mutations";
+import { normalizeVerifyCommand } from "../core/task-verification";
 import { resolveProjectInputPath } from "../projects/project-path";
 import { loadWorkspaceContext, mutateWorkspaceState } from "../state/workspace-state";
 import type { RuntimeAppRouter } from "../trpc/app-router";
@@ -199,6 +202,17 @@ function parseOptionalStringOrDefault(value: string | undefined): string | null 
 		return null;
 	}
 	return value;
+}
+
+function parseVerifyCommandOption(value: string | undefined): string | null | undefined {
+	if (value === undefined) {
+		return undefined;
+	}
+	if (value === "default") {
+		return null;
+	}
+	const trimmed = value.trim();
+	return trimmed.length > 0 ? trimmed : null;
 }
 
 type ParsedTaskReasoningEffort = string | null | undefined;
@@ -485,6 +499,8 @@ function formatTaskRecord(
 		autoReviewMode: task.autoReviewMode ?? "commit",
 		...(task.agentId ? { agentId: task.agentId } : {}),
 		...formatTaskAgentSettings(task.agentSettings),
+		...(task.verifyCommand ? { verifyCommand: task.verifyCommand } : {}),
+		...(task.verifyResult ? { verifyResult: task.verifyResult } : {}),
 		createdAt: task.createdAt,
 		updatedAt: task.updatedAt,
 		unfinishedPrerequisites: formatUnfinishedPrerequisites(state, task.id),
@@ -637,6 +653,7 @@ async function createTask(input: {
 	autoReviewMode?: "commit" | "pr";
 	agentId?: RuntimeAgentId;
 	agentSettings?: RuntimeTaskAgentSettings;
+	verifyCommand?: string;
 }): Promise<JsonRecord> {
 	const workspaceRepoPath = await resolveWorkspaceRepoPath(input.projectPath, input.cwd);
 	const workspaceId = await ensureRuntimeWorkspace(workspaceRepoPath);
@@ -661,6 +678,7 @@ async function createTask(input: {
 				agentId: input.agentId,
 				agentSettings: input.agentSettings,
 				baseRef: resolvedBaseRef,
+				verifyCommand: input.verifyCommand,
 			},
 			() => globalThis.crypto.randomUUID(),
 		);
@@ -684,6 +702,7 @@ async function createTask(input: {
 			autoReviewMode: created.autoReviewMode ?? "commit",
 			...(created.agentId ? { agentId: created.agentId } : {}),
 			...formatTaskAgentSettings(created.agentSettings),
+			...(created.verifyCommand ? { verifyCommand: created.verifyCommand } : {}),
 		},
 	};
 }
@@ -702,6 +721,7 @@ async function updateTaskCommand(input: {
 	providerId?: string | null;
 	modelId?: string | null;
 	reasoningEffort?: ParsedTaskReasoningEffort;
+	verifyCommand?: string | null;
 }): Promise<JsonRecord> {
 	if (
 		input.title === undefined &&
@@ -713,7 +733,8 @@ async function updateTaskCommand(input: {
 		input.agentId === undefined &&
 		input.providerId === undefined &&
 		input.modelId === undefined &&
-		input.reasoningEffort === undefined
+		input.reasoningEffort === undefined &&
+		input.verifyCommand === undefined
 	) {
 		throw new Error("task update requires at least one field to change.");
 	}
@@ -743,6 +764,7 @@ async function updateTaskCommand(input: {
 			autoReviewMode: input.autoReviewMode ?? taskRecord.task.autoReviewMode ?? "commit",
 			agentId: input.agentId,
 			agentSettings,
+			verifyCommand: input.verifyCommand,
 		});
 		if (!updatedTask.updated || !updatedTask.task) {
 			throw new Error(`Task "${input.taskId}" could not be updated.`);
@@ -767,6 +789,62 @@ async function updateTaskCommand(input: {
 		ok: true,
 		task: updated,
 		workspacePath: workspaceRepoPath,
+	};
+}
+
+async function verifyTask(input: { cwd: string; taskId: string; projectPath?: string }): Promise<JsonRecord> {
+	const workspaceRepoPath = await resolveWorkspaceRepoPath(input.projectPath, input.cwd);
+	const workspaceId = await ensureRuntimeWorkspace(workspaceRepoPath);
+	const runtimeClient = createRuntimeTrpcClient(workspaceId);
+	const runtimeState = await runtimeClient.workspace.getState.query();
+	const taskId = input.taskId.trim();
+	if (!taskId) {
+		throw new Error("task verify requires --task-id.");
+	}
+	const record = findTaskRecord(runtimeState, taskId);
+	if (!record) {
+		throw new Error(`Task "${taskId}" was not found in workspace ${workspaceRepoPath}.`);
+	}
+	const verifyCommand = normalizeVerifyCommand(record.task.verifyCommand);
+	if (!verifyCommand) {
+		throw new Error(`Task "${taskId}" has no verifyCommand. Set one with task update --verify-command.`);
+	}
+
+	const taskContext = await runtimeClient.workspace.getTaskContext.query({
+		taskId,
+		baseRef: record.task.baseRef,
+	});
+	if (!taskContext.exists) {
+		throw new Error(`Task worktree does not exist for "${taskId}". Start the task before verifying.`);
+	}
+
+	const verifyResult = await runVerifyCommandInWorktree({
+		command: verifyCommand,
+		cwd: taskContext.path,
+	});
+	const updated = await updateRuntimeWorkspaceState(runtimeClient, workspaceRepoPath, (latestState) => {
+		const recorded = recordTaskVerifyResult(latestState.board, taskId, verifyResult);
+		if (!recorded.updated || !recorded.task) {
+			throw new Error(`Task "${taskId}" could not be updated with the verification result.`);
+		}
+		const nextState: RuntimeWorkspaceStateResponse = {
+			...latestState,
+			board: recorded.board,
+		};
+		const latestRecord = findTaskRecord(nextState, taskId);
+		return {
+			board: recorded.board,
+			value: formatTaskRecord(nextState, recorded.task, latestRecord?.columnId ?? record.columnId),
+		};
+	});
+
+	return {
+		ok: true,
+		passed: verifyResult.ok,
+		workspacePath: workspaceRepoPath,
+		worktreePath: taskContext.path,
+		verifyResult,
+		task: updated,
 	};
 }
 
@@ -1318,6 +1396,10 @@ export function registerTaskCommand(program: Command): void {
 		.option("--start-in-plan-mode [value]", "Set plan mode (true|false). Flag-only implies true.")
 		.option("--auto-review-enabled [value]", "Enable auto-review behavior (true|false). Flag-only implies true.")
 		.option("--auto-review-mode <mode>", "Auto-review mode: commit | pr.", parseAutoReviewMode)
+		.option(
+			"--verify-command <command>",
+			"Optional command run in the task worktree before auto-review can complete.",
+		)
 		.option("--agent-id <id>", formatAgentIdOptionHelp("create"))
 		.option("--provider <id>", "Provider override for the task's agent. Valid values depend on the agent.")
 		.option("--model <id>", "Model override for the task's agent. Valid values depend on the agent.")
@@ -1334,6 +1416,7 @@ export function registerTaskCommand(program: Command): void {
 				startInPlanMode?: unknown;
 				autoReviewEnabled?: unknown;
 				autoReviewMode?: "commit" | "pr";
+				verifyCommand?: string;
 				agentId?: string;
 				provider?: string;
 				model?: string;
@@ -1353,6 +1436,7 @@ export function registerTaskCommand(program: Command): void {
 							startInPlanMode: parseOptionalBooleanOption(options.startInPlanMode, "--start-in-plan-mode"),
 							autoReviewEnabled: parseOptionalBooleanOption(options.autoReviewEnabled, "--auto-review-enabled"),
 							autoReviewMode: options.autoReviewMode,
+							verifyCommand: parseVerifyCommandOption(options.verifyCommand) ?? undefined,
 							agentId: parseAgentId(options.agentId) ?? undefined,
 							agentSettings: buildTaskAgentSettingsForCreate({
 								providerId:
@@ -1393,6 +1477,7 @@ export function registerTaskCommand(program: Command): void {
 		.option("--start-in-plan-mode [value]", "Set plan mode (true|false). Flag-only implies true.")
 		.option("--auto-review-enabled [value]", "Enable auto-review behavior (true|false). Flag-only implies true.")
 		.option("--auto-review-mode <mode>", "Auto-review mode: commit | pr.", parseAutoReviewMode)
+		.option("--verify-command <command>", 'Replacement verification command. Use "default" to clear.')
 		.option("--agent-id <id>", formatAgentIdOptionHelp("update"))
 		.option(
 			"--provider <id>",
@@ -1419,6 +1504,7 @@ export function registerTaskCommand(program: Command): void {
 				startInPlanMode?: unknown;
 				autoReviewEnabled?: unknown;
 				autoReviewMode?: "commit" | "pr";
+				verifyCommand?: string;
 				agentId?: string;
 				provider?: string;
 				model?: string;
@@ -1439,6 +1525,7 @@ export function registerTaskCommand(program: Command): void {
 							startInPlanMode: parseOptionalBooleanOption(options.startInPlanMode, "--start-in-plan-mode"),
 							autoReviewEnabled: parseOptionalBooleanOption(options.autoReviewEnabled, "--auto-review-enabled"),
 							autoReviewMode: options.autoReviewMode,
+							verifyCommand: parseVerifyCommandOption(options.verifyCommand),
 							agentId: parseAgentId(options.agentId),
 							providerId: parseOptionalStringOrDefault(
 								resolveSettingsFlag(options.provider, options.clineProvider, "--provider", "--cline-provider"),
@@ -1581,5 +1668,24 @@ export function registerTaskCommand(program: Command): void {
 						projectPath: options.projectPath,
 					}),
 			);
+		});
+
+	task
+		.command("verify")
+		.description("Run the task's verification command in its worktree and record the result.")
+		.requiredOption("--task-id <id>", "Task ID.")
+		.option("--project-path <path>", "Workspace path. Defaults to current directory workspace.")
+		.action(async (options: { taskId: string; projectPath?: string }) => {
+			await runTaskCommand(async () => {
+				const result = await verifyTask({
+					cwd: process.cwd(),
+					taskId: options.taskId,
+					projectPath: options.projectPath,
+				});
+				if (result.passed !== true) {
+					process.exitCode = 1;
+				}
+				return result;
+			});
 		});
 }

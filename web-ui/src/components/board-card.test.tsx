@@ -300,6 +300,46 @@ describe("BoardCard", () => {
 		expect(container.textContent).not.toContain("openai/gpt-5.5");
 	});
 
+	it("shows a green verify passed status on the card", async () => {
+		await act(async () => {
+			root.render(
+				<TooltipProvider>
+					<BoardCard
+						card={createCard({
+							verifyCommand: "npm test",
+							verifyResult: { ok: true, output: "ok", recordedAt: 1 },
+						})}
+						index={0}
+						columnId="review"
+					/>
+				</TooltipProvider>,
+			);
+		});
+
+		expect(container.textContent).toContain("Verify passed");
+		expect(container.textContent).not.toContain("Verify failed");
+	});
+
+	it("shows a red verify failed status on the card", async () => {
+		await act(async () => {
+			root.render(
+				<TooltipProvider>
+					<BoardCard
+						card={createCard({
+							verifyCommand: "npm test",
+							verifyResult: { ok: false, output: "1 failing", recordedAt: 1 },
+						})}
+						index={0}
+						columnId="review"
+					/>
+				</TooltipProvider>,
+			);
+		});
+
+		expect(container.textContent).toContain("Verify failed");
+		expect(container.textContent).not.toContain("Verify passed");
+	});
+
 	it("shows the task-level indicator for reasoning-only overrides", async () => {
 		await act(async () => {
 			root.render(

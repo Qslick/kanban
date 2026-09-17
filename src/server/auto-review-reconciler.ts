@@ -22,6 +22,7 @@ import type {
 	RuntimeWorkspaceStateResponse,
 } from "../core/api-contract";
 import { isPendingGitActionStale, moveTaskToColumn } from "../core/task-board-mutations";
+import { isTaskVerificationSatisfied } from "../core/task-verification";
 import type {
 	RuntimeWorkspaceAtomicMutationResponse,
 	RuntimeWorkspaceAtomicMutationResult,
@@ -245,6 +246,9 @@ export function createAutoReviewReconciler(deps: CreateAutoReviewReconcilerDepen
 				if (!location || location.columnId !== "review" || location.card.autoReviewEnabled !== true) {
 					return { board: currentState.board, value: "unavailable" as const, save: false };
 				}
+				if (!isTaskVerificationSatisfied(location.card)) {
+					return { board: currentState.board, value: "blocked" as const, save: false };
+				}
 				const existing = location.card.pendingGitAction ?? null;
 				if (existing && !isPendingGitActionStale(existing, timestamp)) {
 					// Another actor already armed this card; the persisted field is the lock.
@@ -305,6 +309,9 @@ export function createAutoReviewReconciler(deps: CreateAutoReviewReconcilerDepen
 					return { board: currentState.board, value: false, save: false };
 				}
 				if (location.card.autoReviewEnabled !== true || !location.card.pendingGitAction) {
+					return { board: currentState.board, value: false, save: false };
+				}
+				if (!isTaskVerificationSatisfied(location.card)) {
 					return { board: currentState.board, value: false, save: false };
 				}
 				const moved = moveTaskToColumn(currentState.board, taskId, "trash", timestamp);
@@ -485,6 +492,9 @@ export function createAutoReviewReconciler(deps: CreateAutoReviewReconcilerDepen
 						}
 						continue;
 					}
+					if (!isTaskVerificationSatisfied(card)) {
+						continue;
+					}
 					// Completion is judged on evidence: HEAD moved past the commit
 					// recorded at arming time. Zero changed files alone proves nothing.
 					const probe = await probeTask(card);
@@ -497,6 +507,10 @@ export function createAutoReviewReconciler(deps: CreateAutoReviewReconcilerDepen
 							boardMutated = true;
 						}
 					}
+					continue;
+				}
+
+				if (!isTaskVerificationSatisfied(card)) {
 					continue;
 				}
 
