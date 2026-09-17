@@ -4,11 +4,26 @@ import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 
 import { BoardCard } from "@/components/board-card";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/components/ui/cn";
 import { ColumnIndicator } from "@/components/ui/column-indicator";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { RuntimeTaskSessionSummary } from "@/runtime/types";
 import { isCardDropDisabled, type ProgrammaticCardMoveInFlight } from "@/state/drag-rules";
 import type { BoardCard as BoardCardModel, BoardColumnId, BoardColumn as BoardColumnModel } from "@/types";
+
+const COLUMN_ACCENT_COLORS: Record<string, string> = {
+	backlog: "var(--color-border-bright)",
+	in_progress: "var(--color-status-blue)",
+	review: "var(--color-status-purple)",
+	trash: "var(--color-status-red)",
+};
+
+const COLUMN_EMPTY_LABELS: Record<string, string> = {
+	backlog: "No backlog tasks",
+	in_progress: "No tasks in progress",
+	review: "No tasks awaiting review",
+	trash: "No completed tasks",
+};
 
 export function BoardColumn({
 	column,
@@ -90,9 +105,9 @@ export function BoardColumn({
 			programmaticCardMoveInFlight,
 		}) || Boolean(readyNowFilter && column.id === "backlog");
 	const createTaskButtonText = (
-		<span className="inline-flex items-center gap-1.5">
+		<span className="inline-flex items-center gap-1.5 font-medium">
 			<span>Create task</span>
-			<span aria-hidden className="text-text-secondary">
+			<span aria-hidden className="text-text-tertiary">
 				(c)
 			</span>
 		</span>
@@ -101,83 +116,112 @@ export function BoardColumn({
 	return (
 		<section
 			data-column-id={column.id}
-			className="flex flex-col min-w-0 min-h-0 bg-surface-1 rounded-lg overflow-hidden border border-border"
+			className="flex flex-col min-w-0 min-h-0 bg-surface-1/90 rounded-xl overflow-hidden border border-border/80 shadow-xs"
 			style={{
 				flex: "1 1 0",
 			}}
 		>
-			<div className="flex flex-col min-h-0" style={{ flex: "1 1 0" }}>
+			<div
+				className="h-[2.5px] w-full shrink-0"
+				style={{
+					backgroundColor: COLUMN_ACCENT_COLORS[column.id] ?? "var(--color-border)",
+					opacity: column.id === "backlog" ? 0.4 : 0.85,
+				}}
+			/>
+			<div className="flex flex-col min-h-0 flex-1">
 				<div
-					className="flex items-center justify-between"
+					className="flex items-center justify-between px-3 py-2 shrink-0 border-b border-border/40"
 					style={{
-						height: 40,
-						padding: "0 12px",
+						minHeight: 40,
 					}}
 				>
 					<div className="flex items-center gap-2 min-w-0">
 						<ColumnIndicator columnId={column.id} />
-						<span className="font-semibold text-sm">{column.title}</span>
-						<span className="text-text-secondary text-xs">{visibleCards.length}</span>
+						<span className="font-semibold text-sm text-text-primary tracking-[-0.01em] truncate">
+							{column.title}
+						</span>
+						<span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-semibold bg-surface-3/80 text-text-secondary border border-border/50">
+							{visibleCards.length}
+						</span>
 					</div>
-					{canToggleReadyNow || canStartAllTasks ? (
-						<div className="flex items-center gap-0.5 shrink-0">
-							{canToggleReadyNow ? (
-								<Tooltip content="Show cards with no unfinished prerequisites">
-									<Button
-										variant={readyNowFilter ? "primary" : "ghost"}
-										size="sm"
-										aria-pressed={readyNowFilter}
-										aria-label="Ready now"
-										onClick={onToggleReadyNowFilter}
-									>
-										Ready now
-									</Button>
-								</Tooltip>
-							) : null}
-							{canStartAllTasks ? (
+					<div className="flex items-center gap-1 shrink-0">
+						{canToggleReadyNow ? (
+							<Tooltip side="bottom" content="Show cards with no unfinished prerequisites">
 								<Button
-									icon={<Play size={14} />}
+									variant={readyNowFilter ? "primary" : "ghost"}
+									size="sm"
+									aria-pressed={readyNowFilter}
+									aria-label="Ready now"
+									onClick={onToggleReadyNowFilter}
+									className="h-7 px-2 text-text-secondary hover:text-text-primary"
+								>
+									Ready now
+								</Button>
+							</Tooltip>
+						) : null}
+						{canStartAllTasks ? (
+							<Tooltip side="bottom" content="Start all backlog tasks">
+								<Button
+									icon={<Play size={13} />}
 									variant="ghost"
 									size="sm"
 									onClick={onStartAllTasks}
 									disabled={column.cards.length === 0}
 									aria-label="Start all backlog tasks"
-									title={column.cards.length > 0 ? "Start all backlog tasks" : "Backlog is empty"}
+									className="h-7 w-7 text-text-secondary hover:text-text-primary"
 								/>
-							) : null}
-						</div>
-					) : null}
-					{canClearTrash ? (
-						<Button
-							icon={<Trash2 size={14} />}
-							variant="ghost"
-							size="sm"
-							className="text-status-red hover:text-status-red"
-							onClick={onClearTrash}
-							disabled={column.cards.length === 0}
-							aria-label="Clear done"
-							title={column.cards.length > 0 ? "Clear done items permanently" : "Done is empty"}
-						/>
-					) : null}
+							</Tooltip>
+						) : null}
+						{canClearTrash ? (
+							<Tooltip side="bottom" content="Clear done items permanently">
+								<Button
+									icon={<Trash2 size={13} />}
+									variant="ghost"
+									size="sm"
+									className="h-7 w-7 text-text-secondary hover:text-status-red"
+									onClick={onClearTrash}
+									disabled={column.cards.length === 0}
+									aria-label="Clear done"
+								/>
+							</Tooltip>
+						) : null}
+					</div>
 				</div>
 
 				<Droppable droppableId={column.id} type={cardDropType} isDropDisabled={isDropDisabled}>
-					{(cardProvided) => (
-						<div ref={cardProvided.innerRef} {...cardProvided.droppableProps} className="kb-column-cards">
+					{(cardProvided, snapshot) => (
+						<div
+							ref={cardProvided.innerRef}
+							{...cardProvided.droppableProps}
+							className={cn(
+								"kb-column-cards transition-colors duration-150",
+								snapshot?.isDraggingOver && "bg-surface-2/30",
+							)}
+						>
 							{canCreate ? (
 								<Button
 									icon={<Plus size={14} />}
 									aria-label="Create task"
 									fill
+									variant="default"
 									onClick={onCreateTask}
-									style={{ marginBottom: 6, flexShrink: 0 }}
+									className="h-8 mb-2 shrink-0 border border-dashed border-border-bright/70 bg-surface-2/60 hover:bg-surface-3 hover:border-solid hover:border-accent/60 text-text-secondary hover:text-text-primary text-xs font-medium rounded-lg transition-all"
 								>
 									{createTaskButtonText}
 								</Button>
 							) : null}
 
 							{readyNowFilter && visibleCards.length === 0 ? (
-								<p className="text-text-secondary text-xs px-0.5 py-2 m-0">No ready cards</p>
+								<div className="flex flex-1 flex-col items-center justify-center p-4 text-center rounded-lg border border-dashed border-border/50 text-text-tertiary my-2">
+									<p className="text-xs text-text-tertiary/70 m-0">No ready cards</p>
+								</div>
+							) : null}
+							{!readyNowFilter && column.cards.length === 0 && !canCreate ? (
+								<div className="flex flex-1 flex-col items-center justify-center p-4 text-center rounded-lg border border-dashed border-border/50 text-text-tertiary my-2">
+									<p className="text-xs text-text-tertiary/70 m-0">
+										{COLUMN_EMPTY_LABELS[column.id] ?? "No tasks"}
+									</p>
+								</div>
 							) : null}
 
 							{(() => {

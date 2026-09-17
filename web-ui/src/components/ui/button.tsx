@@ -15,11 +15,12 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles: Record<ButtonVariant, string> = {
 	default:
-		"bg-surface-2 border border-border-bright text-text-primary hover:bg-surface-3 hover:border-border-bright active:bg-surface-4",
-	primary: "bg-accent text-accent-fg border border-transparent hover:bg-accent-hover active:brightness-90",
+		"bg-surface-2 border border-border-bright text-text-primary shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_1px_2px_0_rgba(0,0,0,0.2)] hover:bg-surface-3 hover:border-border-bright hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08),0_1px_3px_0_rgba(0,0,0,0.3)] active:bg-surface-4 active:scale-[0.98] transition-all duration-150",
+	primary:
+		"bg-accent text-accent-fg border border-transparent shadow-[inset_0_1px_0_0_rgba(255,255,255,0.25),0_1px_3px_0_rgba(0,0,0,0.3)] hover:bg-accent-hover hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.3),0_2px_5px_0_rgba(0,0,0,0.35)] active:brightness-95 active:scale-[0.98] transition-all duration-150",
 	danger:
-		"bg-status-red/10 text-status-red border border-status-red/30 hover:bg-status-red/20 active:bg-status-red/30",
-	ghost: "bg-transparent text-text-secondary border border-transparent hover:text-text-primary hover:bg-surface-3 active:bg-surface-4",
+		"bg-status-red/10 text-status-red border border-status-red/30 hover:bg-status-red/20 active:bg-status-red/30 active:scale-[0.98] transition-all duration-150",
+	ghost: "bg-transparent text-text-secondary border border-transparent hover:text-text-primary hover:bg-surface-3 active:bg-surface-4 active:scale-[0.98] transition-all duration-150",
 };
 
 const sizeStyles: Record<ButtonSize, string> = {

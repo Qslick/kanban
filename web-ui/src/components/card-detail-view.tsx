@@ -245,7 +245,12 @@ function DiffModeButton({
 			size="sm"
 			onClick={onClick}
 			aria-pressed={active}
-			className="h-5 rounded-sm text-xs"
+			className={cn(
+				"h-6 px-2 text-xs font-medium rounded-md transition-all",
+				active
+					? "text-text-primary shadow-xs font-semibold"
+					: "text-text-secondary hover:text-text-primary hover:bg-surface-3/50",
+			)}
 			style={
 				active
 					? {
@@ -274,18 +279,18 @@ function DiffToolbar({
 	hideExpand?: boolean;
 }): React.ReactElement {
 	return (
-		<div className="flex items-center gap-1 border-b border-divider px-2 py-1">
+		<div className="flex items-center gap-1.5 border-b border-border/80 bg-surface-1/60 px-2 py-1">
 			{isExpanded ? (
 				<Button
 					variant="ghost"
 					size="sm"
 					icon={<X size={14} />}
 					onClick={onToggleExpand}
-					className="h-5"
+					className="h-6 w-6 p-0 text-text-secondary hover:text-text-primary"
 					aria-label="Collapse expanded diff view"
 				/>
 			) : null}
-			<div className="inline-flex items-center gap-0.5 rounded-md p-0.5">
+			<div className="inline-flex items-center gap-0.5 rounded-lg border border-border/70 bg-surface-0/60 p-0.5 shadow-inner">
 				<DiffModeButton active={mode === "working_copy"} onClick={() => onModeChange("working_copy")}>
 					All Changes
 				</DiffModeButton>
@@ -297,9 +302,9 @@ function DiffToolbar({
 				<Button
 					variant="ghost"
 					size="sm"
-					icon={isExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+					icon={isExpanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
 					onClick={onToggleExpand}
-					className="ml-auto h-5"
+					className="ml-auto h-6 w-6 p-0 text-text-secondary hover:text-text-primary"
 					aria-label={isExpanded ? "Collapse split diff view" : "Expand split diff view"}
 				/>
 			) : null}

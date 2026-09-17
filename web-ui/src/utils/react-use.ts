@@ -67,13 +67,13 @@ function resolveNextValue<T>(nextValue: SetStateAction<T>, currentValue: T): T {
 export function useBooleanLocalStorageValue(key: string, initialValue: boolean): [boolean, StateSetter<boolean>] {
 	const [storedValue, setStoredValue] = useReactUseLocalStorage<boolean>(key, initialValue, {
 		raw: false,
-		serializer: (value) => String(value),
-		deserializer: (value) => value === "true",
+		serializer: (value: boolean) => String(value),
+		deserializer: (value: string) => value === "true",
 	});
 	const value = storedValue ?? initialValue;
 	const setValue: StateSetter<boolean> = useCallback(
 		(nextValue) => {
-			setStoredValue((currentValue) => {
+			setStoredValue((currentValue: boolean | undefined) => {
 				const resolvedCurrent = currentValue ?? initialValue;
 				return resolveNextValue(nextValue, resolvedCurrent);
 			});
@@ -94,7 +94,7 @@ export function useRawLocalStorageValue<T extends string>(
 	const value = storedValue ? (normalize(storedValue) ?? initialValue) : initialValue;
 	const setValue: StateSetter<T> = useCallback(
 		(nextValue) => {
-			setStoredValue((currentValue) => {
+			setStoredValue((currentValue: string | undefined) => {
 				const resolvedCurrent = currentValue ? (normalize(currentValue) ?? initialValue) : initialValue;
 				return resolveNextValue(nextValue, resolvedCurrent);
 			});

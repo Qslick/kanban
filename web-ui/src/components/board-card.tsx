@@ -14,7 +14,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import { Spinner } from "@/components/ui/spinner";
-import { Tooltip } from "@/components/ui/tooltip";
 import type { RuntimeTaskSessionSummary } from "@/runtime/types";
 import { useTaskWorkspaceSnapshotValue } from "@/stores/workspace-metadata-store";
 import type { BoardCard as BoardCardModel, BoardColumnId } from "@/types";
@@ -470,6 +469,11 @@ export function BoardCard({
 
 	const activeDescriptionDisplay = isDescriptionExpanded ? descriptionDisplay.expanded : descriptionDisplay.collapsed;
 
+	const taskKey = useMemo(() => {
+		const trimmed = card.id.replace(/^task-/, "");
+		return `#${trimmed.length > 8 ? trimmed.slice(0, 6).toUpperCase() : trimmed.toUpperCase()}`;
+	}, [card.id]);
+
 	return (
 		<Draggable draggableId={card.id} index={index} isDragDisabled={false}>
 			{(provided, snapshot) => {
@@ -542,125 +546,128 @@ export function BoardCard({
 					>
 						<div
 							className={cn(
-								"rounded-md border border-border-bright bg-surface-2 p-2.5",
-								isCardInteractive && "cursor-pointer hover:bg-surface-3 hover:border-border-bright",
-								isDragging && "shadow-lg",
-								isHovered && isCardInteractive && "bg-surface-3 border-border-bright",
+								"kb-board-card-inner rounded-xl border border-border/80 bg-surface-2 p-3 shadow-xs",
+								isCardInteractive && "cursor-pointer hover:bg-surface-2 hover:border-border-bright",
+								isDragging && "shadow-2xl shadow-black/80 ring-1 ring-accent scale-[1.02] rotate-[0.5deg]",
+								isHovered && isCardInteractive && "border-border-bright",
 								isDependencySource && "kb-board-card-dependency-source",
 								isDependencyTarget && "kb-board-card-dependency-target",
 							)}
 						>
-							<div className="flex items-center gap-2" style={{ minHeight: 24 }}>
-								{statusMarker ? <div className="inline-flex items-center">{statusMarker}</div> : null}
-								<div className="flex-1 min-w-0">
-									{isEditingTitle ? (
-										<input
-											ref={titleInputRef}
-											value={draftTitle}
-											onChange={(event) => setDraftTitle(event.currentTarget.value)}
-											onBlur={submitTitle}
-											onKeyDown={handleTitleKeyDown}
-											onMouseDown={(event) => {
-												event.stopPropagation();
+							{/* Top header row: Status Marker + Issue Key + Floating actions */}
+							<div className="flex items-center justify-between gap-1.5 mb-1.5" style={{ minHeight: 22 }}>
+								<div className="flex items-center gap-1.5 min-w-0">
+									{statusMarker ? (
+										<div className="inline-flex items-center shrink-0">{statusMarker}</div>
+									) : null}
+									<span className="font-mono text-[10px] font-semibold text-text-tertiary px-1.5 py-0.5 rounded bg-surface-3/80 border border-border/40 shrink-0">
+										{taskKey}
+									</span>
+								</div>
+								<div className="flex items-center gap-1 shrink-0">
+									{onSaveTitle && !isEditingTitle ? (
+										<button
+											type="button"
+											aria-label="Edit task title"
+											onMouseDown={stopEvent}
+											onClick={(event) => {
+												stopEvent(event);
+												setDraftTitle(card.title);
+												setIsEditingTitle(true);
 											}}
-											className="h-7 w-full rounded-md border border-border-focus bg-surface-2 px-2 text-sm font-medium text-text-primary focus:outline-none"
-										/>
-									) : onSaveTitle ? (
-										<div className="flex items-center gap-1 min-w-0">
-											<p
-												className={cn(
-													"kb-line-clamp-1 m-0 min-w-0 font-medium text-sm",
-													isTrashCard && "line-through text-text-tertiary",
-												)}
-											>
-												{displayTitle}
-											</p>
-											<button
-												type="button"
-												aria-label="Edit task title"
-												onMouseDown={stopEvent}
-												onClick={(event) => {
-													stopEvent(event);
-													setDraftTitle(card.title);
-													setIsEditingTitle(true);
-												}}
-												className={cn(
-													"shrink-0 cursor-pointer rounded-sm p-0.5 text-text-tertiary hover:text-text-primary focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-													isHovered ? "opacity-100" : "opacity-0",
-												)}
-											>
-												<Pencil size={12} />
-											</button>
-										</div>
-									) : (
-										<p
 											className={cn(
-												"kb-line-clamp-1 m-0 font-medium text-sm",
-												isTrashCard && "line-through text-text-tertiary",
+												"cursor-pointer rounded p-0.5 text-text-tertiary hover:text-text-primary hover:bg-surface-3 transition-opacity",
+												isHovered ? "opacity-100" : "opacity-0",
 											)}
 										>
-											{displayTitle}
-										</p>
-									)}
-								</div>
-								{columnId === "backlog" ? (
-									<Button
-										icon={<Play size={14} />}
-										variant="ghost"
-										size="sm"
-										aria-label="Start task"
-										onMouseDown={stopEvent}
-										onClick={(event) => {
-											stopEvent(event);
-											onStart?.(card.id);
-										}}
-									/>
-								) : columnId === "review" ? (
-									<Button
-										icon={isMoveToTrashLoading ? <Spinner size={13} /> : <Trash2 size={13} />}
-										variant="ghost"
-										size="sm"
-										disabled={isMoveToTrashLoading}
-										aria-label="Move task to done"
-										onMouseDown={stopEvent}
-										onClick={(event) => {
-											stopEvent(event);
-											onMoveToTrash?.(card.id);
-										}}
-									/>
-								) : columnId === "trash" ? (
-									<Tooltip
-										side="bottom"
-										content={
-											<>
-												Restore session
-												<br />
-												in new worktree
-											</>
-										}
-									>
+											<Pencil size={12} />
+										</button>
+									) : null}
+									{columnId === "backlog" ? (
+										<Button
+											icon={<Play size={13} />}
+											variant="ghost"
+											size="sm"
+											title="Start task"
+											aria-label="Start task"
+											className={cn(
+												"h-6 w-6 text-text-secondary hover:text-status-green hover:bg-status-green/10 transition-opacity",
+												isHovered ? "opacity-100" : "opacity-0",
+											)}
+											onMouseDown={stopEvent}
+											onClick={(event) => {
+												stopEvent(event);
+												onStart?.(card.id);
+											}}
+										/>
+									) : columnId === "review" ? (
+										<Button
+											icon={isMoveToTrashLoading ? <Spinner size={12} /> : <Trash2 size={12} />}
+											variant="ghost"
+											size="sm"
+											disabled={isMoveToTrashLoading}
+											title="Move to done"
+											aria-label="Move task to done"
+											className="h-6 w-6 text-text-secondary hover:text-text-primary"
+											onMouseDown={stopEvent}
+											onClick={(event) => {
+												stopEvent(event);
+												onMoveToTrash?.(card.id);
+											}}
+										/>
+									) : columnId === "trash" ? (
 										<Button
 											icon={<RotateCcw size={12} />}
 											variant="ghost"
 											size="sm"
+											title="Restore session in new worktree"
 											aria-label="Restore task from done"
+											className="h-6 w-6 text-text-secondary hover:text-text-primary"
 											onMouseDown={stopEvent}
 											onClick={(event) => {
 												stopEvent(event);
 												onRestoreFromTrash?.(card.id);
 											}}
 										/>
-									</Tooltip>
-								) : null}
+									) : null}
+								</div>
 							</div>
+
+							{/* Task Title */}
+							<div className="mb-1">
+								{isEditingTitle ? (
+									<input
+										ref={titleInputRef}
+										value={draftTitle}
+										onChange={(event) => setDraftTitle(event.currentTarget.value)}
+										onBlur={submitTitle}
+										onKeyDown={handleTitleKeyDown}
+										onMouseDown={(event) => {
+											event.stopPropagation();
+										}}
+										className="h-7 w-full rounded-md border border-border-focus bg-surface-2 px-2 text-sm font-medium text-text-primary focus:outline-none"
+									/>
+								) : (
+									<p
+										className={cn(
+											"kb-line-clamp-2 m-0 font-medium text-[13px] text-text-primary leading-snug tracking-[-0.01em]",
+											isTrashCard && "line-through text-text-tertiary",
+										)}
+									>
+										{displayTitle}
+									</p>
+								)}
+							</div>
+
+							{/* Task Description */}
 							{displayDescription ? (
-								<div ref={descriptionContainerRef}>
+								<div ref={descriptionContainerRef} className="mt-1">
 									<p
 										ref={descriptionRef}
 										className={cn(
-											"text-sm leading-[1.4]",
-											isTrashCard ? "text-text-tertiary" : "text-text-secondary",
-											!isDescriptionMeasured && !isDescriptionExpanded && "line-clamp-3",
+											"text-[12px] leading-relaxed",
+											isTrashCard ? "text-text-tertiary" : "text-text-secondary/90",
+											!isDescriptionMeasured && !isDescriptionExpanded && "line-clamp-2",
 										)}
 										style={{
 											margin: "2px 0 0",
@@ -711,14 +718,16 @@ export function BoardCard({
 									</p>
 								</div>
 							) : null}
+
+							{/* Agent & Model Settings Pill */}
 							{taskAgentSettingsLabel ? (
-								<div className="mt-1">
+								<div className="mt-2">
 									<span
 										className={cn(
-											"inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs",
+											"inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium shadow-2xs",
 											isTrashCard
 												? "border-border text-text-tertiary bg-surface-1"
-												: "border-status-blue/30 bg-status-blue/10 text-status-blue",
+												: "border-status-blue/25 bg-status-blue/10 text-status-blue",
 										)}
 									>
 										<Bot size={12} className="shrink-0" />
@@ -726,80 +735,75 @@ export function BoardCard({
 									</span>
 								</div>
 							) : null}
+
+							{/* Live Activity Row with Pulsing Radar Dot */}
 							{sessionActivity ? (
 								<div
-									className="flex gap-1.5 items-start mt-[6px]"
+									className="flex items-center gap-2 mt-2 px-2 py-1 rounded-md bg-surface-1/70 border border-border/40"
 									style={{
 										color: isTrashCard ? SESSION_ACTIVITY_COLOR.muted : undefined,
 									}}
 								>
 									<span
-										className="inline-block shrink-0 rounded-full"
+										className={cn(
+											"inline-block shrink-0 rounded-full h-2 w-2",
+											!isTrashCard &&
+												sessionActivity.dotColor === SESSION_ACTIVITY_COLOR.thinking &&
+												"kb-radar-dot",
+										)}
 										style={{
-											width: 6,
-											height: 6,
 											backgroundColor: isTrashCard ? SESSION_ACTIVITY_COLOR.muted : sessionActivity.dotColor,
-											marginTop: 4,
+											color: sessionActivity.dotColor,
 										}}
 									/>
 									<div className="min-w-0 flex-1">
-										<p className="m-0 font-mono truncate" style={{ fontSize: 12 }}>
+										<p
+											className="m-0 font-mono truncate text-[11px]"
+											style={{ color: "var(--color-text-secondary)" }}
+										>
 											{sessionActivity.text}
 										</p>
 									</div>
 								</div>
 							) : null}
+
+							{/* Git Branch & Diff Summary */}
 							{showWorkspaceStatus && reviewWorkspacePath ? (
-								<p
-									className="font-mono"
-									style={{
-										margin: "4px 0 0",
-										fontSize: 12,
-										lineHeight: 1.4,
-										whiteSpace: "normal",
-										overflowWrap: "anywhere",
-										color: isTrashCard ? SESSION_ACTIVITY_COLOR.muted : undefined,
-									}}
+								<div
+									className={cn(
+										"flex items-center flex-wrap gap-1.5 mt-2 pt-2 border-t border-border/40 font-mono text-[11px]",
+										isTrashCard && "opacity-60",
+									)}
 								>
 									{isTrashCard ? (
-										<span
-											style={{
-												color: SESSION_ACTIVITY_COLOR.muted,
-												textDecoration: "line-through",
-											}}
-										>
-											{reviewWorkspacePath}
-										</span>
+										<span className="truncate line-through text-text-tertiary">{reviewWorkspacePath}</span>
 									) : reviewWorkspaceSnapshot ? (
 										<>
-											<span style={{ color: SESSION_ACTIVITY_COLOR.secondary }}>{reviewWorkspacePath}</span>
-											<GitBranch
-												size={10}
-												style={{
-													display: "inline",
-													color: SESSION_ACTIVITY_COLOR.secondary,
-													margin: "0px 4px 2px",
-													verticalAlign: "middle",
-												}}
-											/>
-											<span style={{ color: SESSION_ACTIVITY_COLOR.secondary }}>{reviewRefLabel}</span>
+											<span
+												className="inline-flex items-center gap-1 rounded bg-surface-3/60 px-1.5 py-0.5 text-text-secondary border border-border/40 max-w-[140px] truncate"
+												title={reviewWorkspacePath}
+											>
+												<GitBranch size={11} className="shrink-0 text-text-tertiary" />
+												<span className="truncate">{reviewRefLabel}</span>
+											</span>
 											{reviewChangeSummary ? (
-												<>
-													<span style={{ color: SESSION_ACTIVITY_COLOR.muted }}> (</span>
-													<span style={{ color: SESSION_ACTIVITY_COLOR.muted }}>
-														{reviewChangeSummary.filesLabel}
+												<span className="inline-flex items-center gap-1 rounded bg-surface-3/60 px-1.5 py-0.5 border border-border/40 text-[10px]">
+													<span className="text-status-green font-semibold">
+														+{reviewChangeSummary.additions}
 													</span>
-													<span className="text-status-green"> +{reviewChangeSummary.additions}</span>
-													<span className="text-status-red"> -{reviewChangeSummary.deletions}</span>
-													<span style={{ color: SESSION_ACTIVITY_COLOR.muted }}>)</span>
-												</>
+													<span className="text-status-red font-semibold">
+														-{reviewChangeSummary.deletions}
+													</span>
+												</span>
 											) : null}
 										</>
 									) : null}
-								</p>
+								</div>
 							) : null}
+
+							{/* Review Git Actions */}
 							{showReviewGitActions ? (
-								<div className="flex gap-1.5 mt-1.5">
+								<div className="flex gap-2 mt-2">
 									<Button
 										variant="primary"
 										size="sm"

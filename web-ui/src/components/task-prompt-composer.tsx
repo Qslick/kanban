@@ -384,8 +384,8 @@ export function TaskPromptComposer({
 						placeholder={placeholder ?? "Describe the task"}
 						disabled={disabled}
 						className={cn(
-							"w-full rounded-md border bg-surface-3 p-3 text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-border-focus focus:outline-none",
-							isDragOver ? "border-accent border-dashed" : "border-border-bright",
+							"w-full rounded-lg border bg-surface-2 p-3 text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-border-focus focus:ring-1 focus:ring-border-focus/30 focus:outline-none transition-all",
+							isDragOver ? "border-accent border-dashed ring-2 ring-accent/30" : "border-border-bright",
 						)}
 						style={{
 							minHeight: 80,

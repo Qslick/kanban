@@ -8,6 +8,7 @@ import {
 	ChevronDown,
 	CircleArrowDown,
 	Command,
+	Folder,
 	GitBranch,
 	Menu,
 	Play,
@@ -127,39 +128,39 @@ function GitBranchStatusControl({
 }): React.ReactElement {
 	if (onToggleGitHistory) {
 		return (
-			<div className="flex items-center min-w-0 overflow-hidden">
+			<div className="flex items-center min-w-0 overflow-hidden gap-1">
 				<Button
 					variant={isGitHistoryOpen ? "primary" : "default"}
 					size="sm"
 					icon={<GitBranch size={12} />}
 					onClick={onToggleGitHistory}
 					className={cn(
-						"font-mono text-xs shrink min-w-0 max-w-full overflow-hidden",
+						"font-mono text-xs shrink min-w-0 max-w-full overflow-hidden h-6.5 px-2",
 						isGitHistoryOpen ? "ring-1 ring-accent" : "kb-navbar-btn",
 					)}
 					title={branchLabel}
 				>
-					<span className="truncate w-full text-left">{branchLabel}</span>
+					<span className="truncate w-full text-left font-medium">{branchLabel}</span>
 				</Button>
-				<span className="font-mono text-xs text-text-tertiary ml-1.5 shrink-0 whitespace-nowrap">
+				<span className="font-mono text-[11px] text-text-tertiary ml-1 shrink-0 whitespace-nowrap">
 					({changedFiles} {changedFiles === 1 ? "file" : "files"}
-					<span className="text-status-green"> +{additions}</span>
-					<span className="text-status-red"> -{deletions}</span>)
+					<span className="text-status-green font-medium"> +{additions}</span>
+					<span className="text-status-red font-medium"> -{deletions}</span>)
 				</span>
 			</div>
 		);
 	}
 
 	return (
-		<span className="font-mono text-xs text-text-secondary mr-1 whitespace-nowrap">
-			<GitBranch size={12} className="inline-block mr-1" style={{ verticalAlign: -1 }} />
-			<span className="text-text-primary">{branchLabel}</span>
-			<span className="ml-1.5">
+		<span className="font-mono text-xs text-text-secondary mr-1 whitespace-nowrap inline-flex items-center gap-1">
+			<GitBranch size={12} className="inline-block text-text-tertiary" />
+			<span className="text-text-primary font-medium">{branchLabel}</span>
+			<span className="ml-1 text-[11px]">
 				<span className="text-text-tertiary">
 					({changedFiles} {changedFiles === 1 ? "file" : "files"}
 				</span>
-				<span className="text-status-green"> +{additions}</span>
-				<span className="text-status-red"> -{deletions}</span>
+				<span className="text-status-green font-medium"> +{additions}</span>
+				<span className="text-status-red font-medium"> -{deletions}</span>
 				<span className="text-text-tertiary">)</span>
 			</span>
 		</span>
@@ -204,8 +205,8 @@ function TopBarGitStatusSection({
 				? `Push ${pushCount} local commit${pushCount === 1 ? "" : "s"} to upstream.`
 				: "Push local commits to upstream. No local commits are pending.";
 		return (
-			<>
-				<div className="w-px h-5 bg-border mx-1" />
+			<div className="flex items-center gap-1.5 ml-1">
+				<div className="w-px h-4 bg-border mx-0.5" />
 				<GitBranchStatusControl
 					branchLabel={branchLabel}
 					changedFiles={homeGitSummary.changedFiles ?? 0}
@@ -214,7 +215,7 @@ function TopBarGitStatusSection({
 					onToggleGitHistory={onToggleGitHistory}
 					isGitHistoryOpen={isGitHistoryOpen}
 				/>
-				<div className="flex gap-0 ml-1">
+				<div className="flex items-center gap-0.5 rounded-md border border-border/70 bg-surface-2/60 p-0.5">
 					<Tooltip
 						side="bottom"
 						content="Fetch latest refs from upstream without changing your local branch or files."
@@ -222,45 +223,62 @@ function TopBarGitStatusSection({
 						<Button
 							variant="ghost"
 							size="sm"
-							icon={runningGitAction === "fetch" ? <Spinner size={14} /> : <CircleArrowDown size={18} />}
+							icon={runningGitAction === "fetch" ? <Spinner size={12} /> : <CircleArrowDown size={14} />}
 							onClick={onGitFetch}
 							disabled={runningGitAction === "fetch"}
 							aria-label="Fetch from upstream"
+							className="h-6 w-6 p-0 text-text-secondary hover:text-text-primary"
 						/>
 					</Tooltip>
 					<Tooltip side="bottom" content={pullTooltip}>
 						<Button
 							variant="ghost"
 							size="sm"
-							icon={runningGitAction === "pull" ? <Spinner size={14} /> : <ArrowDown size={14} />}
+							icon={runningGitAction === "pull" ? <Spinner size={12} /> : <ArrowDown size={12} />}
 							onClick={onGitPull}
 							disabled={runningGitAction === "pull"}
 							aria-label="Pull from upstream"
+							className="h-6 px-1.5 text-xs text-text-secondary hover:text-text-primary gap-1"
 						>
-							<span className="text-text-tertiary">{pullCount}</span>
+							<span
+								className={cn(
+									"text-[11px] font-mono",
+									pullCount > 0 ? "text-accent font-semibold" : "text-text-tertiary",
+								)}
+							>
+								{pullCount}
+							</span>
 						</Button>
 					</Tooltip>
 					<Tooltip side="bottom" content={pushTooltip}>
 						<Button
 							variant="ghost"
 							size="sm"
-							icon={runningGitAction === "push" ? <Spinner size={14} /> : <ArrowUp size={14} />}
+							icon={runningGitAction === "push" ? <Spinner size={12} /> : <ArrowUp size={12} />}
 							onClick={onGitPush}
 							disabled={runningGitAction === "push"}
 							aria-label="Push to upstream"
+							className="h-6 px-1.5 text-xs text-text-secondary hover:text-text-primary gap-1"
 						>
-							<span className="text-text-tertiary">{pushCount}</span>
+							<span
+								className={cn(
+									"text-[11px] font-mono",
+									pushCount > 0 ? "text-status-green font-semibold" : "text-text-tertiary",
+								)}
+							>
+								{pushCount}
+							</span>
 						</Button>
 					</Tooltip>
 				</div>
-			</>
+			</div>
 		);
 	}
 
 	if (selectedTaskId && (taskWorkspaceInfo || taskWorkspaceSnapshot)) {
 		return (
-			<>
-				<div className="w-px h-5 bg-border mx-1" />
+			<div className="flex items-center gap-1.5 ml-1">
+				<div className="w-px h-4 bg-border mx-0.5" />
 				<GitBranchStatusControl
 					branchLabel={
 						taskWorkspaceInfo?.branch ?? taskWorkspaceSnapshot?.headCommit?.slice(0, 8) ?? "initializing"
@@ -271,7 +289,7 @@ function TopBarGitStatusSection({
 					onToggleGitHistory={onToggleGitHistory}
 					isGitHistoryOpen={isGitHistoryOpen}
 				/>
-			</>
+			</div>
 		);
 	}
 
@@ -399,11 +417,10 @@ export function TopBar({
 	return (
 		<>
 			<nav
-				className="kb-top-bar flex flex-nowrap items-center h-10 min-h-[40px] min-w-0 bg-surface-1"
+				className="kb-top-bar flex flex-nowrap items-center h-10 min-h-[40px] min-w-0 bg-surface-1/95 border-b border-border/80 backdrop-blur-xs"
 				style={{
 					paddingLeft: onBack ? 6 : 12,
 					paddingRight: 8,
-					borderBottom: "1px solid var(--color-divider)",
 				}}
 			>
 				{/* ---- Left side: hamburger/back, path, hints, git ---- */}
@@ -439,14 +456,22 @@ export function TopBar({
 							aria-hidden
 						/>
 					) : displayWorkspacePath ? (
-						<div className={cn("shrink min-w-0 overflow-hidden", isMobile ? "max-w-[180px]" : "max-w-[640px]")}>
+						<div
+							className={cn(
+								"flex items-center shrink min-w-0 overflow-hidden",
+								isMobile ? "max-w-[180px]" : "max-w-[640px]",
+							)}
+						>
+							<Folder size={13} className="text-text-tertiary mr-1.5 shrink-0" />
 							<span
 								className="font-mono truncate block w-full min-w-0 text-xs max-w-full text-text-secondary"
 								title={workspacePath}
 								data-testid="workspace-path"
 							>
 								{isMobile ? (
-									<span className="text-text-primary">{workspaceSegments[workspaceSegments.length - 1]}</span>
+									<span className="text-text-primary font-medium">
+										{workspaceSegments[workspaceSegments.length - 1]}
+									</span>
 								) : (
 									<>
 										{hasAbsoluteLeadingSlash ? "/" : ""}
@@ -454,8 +479,20 @@ export function TopBar({
 											const isLast = index === workspaceSegments.length - 1;
 											return (
 												<span key={`${segment}-${index}`}>
-													{index === 0 ? "" : "/"}
-													<span className={isLast ? "text-text-primary" : undefined}>{segment}</span>
+													{index === 0 ? (
+														""
+													) : (
+														<span className="text-text-tertiary/60 mx-1 select-none">/</span>
+													)}
+													<span
+														className={
+															isLast
+																? "text-text-primary font-medium"
+																: "hover:text-text-primary transition-colors"
+														}
+													>
+														{segment}
+													</span>
 												</span>
 											);
 										})}
@@ -524,29 +561,29 @@ export function TopBar({
 						<>
 							{!hideProjectDependentActions && onRunShortcut ? (
 								selectedShortcut ? (
-									<div className="flex">
+									<div className="flex items-center rounded-md border border-border/80 bg-surface-2/60 p-0.5 shadow-xs">
 										<Button
-											variant="default"
+											variant="ghost"
 											size="sm"
 											icon={
-												runningShortcutLabel ? <Spinner size={12} /> : <SelectedShortcutIcon size={14} />
+												runningShortcutLabel ? <Spinner size={12} /> : <SelectedShortcutIcon size={13} />
 											}
 											disabled={Boolean(runningShortcutLabel)}
 											onClick={() => onRunShortcut(selectedShortcut.label)}
-											className="text-xs rounded-r-none kb-navbar-btn"
+											className="h-6.5 text-xs font-medium text-text-primary hover:bg-surface-3 px-2 rounded-r-none"
 										>
 											{selectedShortcut.label}
 										</Button>
+										<div className="w-px h-3.5 bg-border/80 shrink-0" />
 										<RadixPopover.Root>
 											<RadixPopover.Trigger asChild>
 												<Button
 													size="sm"
-													variant="default"
-													icon={<ChevronDown size={12} />}
+													variant="ghost"
+													icon={<ChevronDown size={11} />}
 													aria-label="Select shortcut"
 													disabled={Boolean(runningShortcutLabel)}
-													className="rounded-l-none border-l-0 kb-navbar-btn"
-													style={{ width: 24, paddingLeft: 0, paddingRight: 0 }}
+													className="h-6.5 w-5 p-0 rounded-l-none text-text-secondary hover:text-text-primary hover:bg-surface-3"
 												/>
 											</RadixPopover.Trigger>
 											<RadixPopover.Portal>
@@ -598,9 +635,9 @@ export function TopBar({
 									<Button
 										variant="default"
 										size="sm"
-										icon={<Play size={14} />}
+										icon={<Play size={13} />}
 										onClick={handleOpenCreateShortcutDialog}
-										className="text-xs kb-navbar-btn"
+										className="text-xs kb-navbar-btn font-medium h-7"
 									>
 										Run
 									</Button>
@@ -612,7 +649,7 @@ export function TopBar({
 									content={
 										<span className="inline-flex items-center gap-1.5 whitespace-nowrap">
 											<span>Toggle terminal</span>
-											<span className="inline-flex items-center gap-0.5 whitespace-nowrap">
+											<span className="inline-flex items-center gap-0.5 whitespace-nowrap text-text-tertiary">
 												<span>(</span>
 												{isMacPlatform ? <Command size={11} /> : <span>Ctrl</span>}
 												<span>+ J)</span>
@@ -623,11 +660,16 @@ export function TopBar({
 									<Button
 										variant="ghost"
 										size="sm"
-										icon={<Terminal size={16} />}
+										icon={<Terminal size={15} />}
 										onClick={onToggleTerminal}
 										disabled={Boolean(isTerminalLoading)}
 										aria-label={isTerminalOpen ? "Close terminal" : "Open terminal"}
-										className="ml-2"
+										className={cn(
+											"ml-1.5 h-7.5 w-7.5 p-0 transition-colors",
+											isTerminalOpen
+												? "bg-surface-3 text-accent border border-accent/40 shadow-xs"
+												: "text-text-secondary hover:text-text-primary",
+										)}
 									/>
 								</Tooltip>
 							) : null}

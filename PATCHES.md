@@ -27,6 +27,7 @@ Install this checkout with `npm run link`. Roll back to the published binary wit
 | feat/and-cli-link | `task link --blocked-by`; `task show` / list `unfinishedPrerequisites` |
 | feat/agent-settings-launch | CLI `--agent-id` help includes grok; tests that card model/effort reach argv |
 | feat/ready-now-filter | Backlog "Ready now" toggle hides cards with unfinished AND blockers |
+| premium_saas_ui_redesign | Visual pass on board columns, cards, project rows, and top bar |
 
 ## Skipped
 
