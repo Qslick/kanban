@@ -1,13 +1,13 @@
 import { Droppable } from "@hello-pangea/dnd";
+import type { AgentMachineDefaultsById } from "@runtime-agent-machine-defaults";
 import { Play, Plus, Trash2 } from "lucide-react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
-
 import { BoardCard } from "@/components/board-card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import { ColumnIndicator } from "@/components/ui/column-indicator";
 import { Tooltip } from "@/components/ui/tooltip";
-import type { RuntimeTaskSessionSummary } from "@/runtime/types";
+import type { RuntimeAgentId, RuntimeTaskSessionSummary } from "@/runtime/types";
 import { isCardDropDisabled, type ProgrammaticCardMoveInFlight } from "@/state/drag-rules";
 import type { BoardCard as BoardCardModel, BoardColumnId, BoardColumn as BoardColumnModel } from "@/types";
 
@@ -55,6 +55,8 @@ export function BoardColumn({
 	isDependencyLinking,
 	workspacePath,
 	defaultClineModelId,
+	defaultAgentId,
+	machineDefaultsByAgent,
 	readyNowFilter,
 	onToggleReadyNowFilter,
 	isCardReadyNow,
@@ -89,6 +91,8 @@ export function BoardColumn({
 	isDependencyLinking?: boolean;
 	workspacePath?: string | null;
 	defaultClineModelId?: string | null;
+	defaultAgentId?: RuntimeAgentId | null;
+	machineDefaultsByAgent?: AgentMachineDefaultsById;
 	readyNowFilter?: boolean;
 	onToggleReadyNowFilter?: () => void;
 	isCardReadyNow?: (taskId: string) => boolean;
@@ -273,6 +277,8 @@ export function BoardColumn({
 											isDependencyLinking={isDependencyLinking}
 											workspacePath={workspacePath}
 											defaultClineModelId={defaultClineModelId}
+											defaultAgentId={defaultAgentId}
+											machineDefaultsByAgent={machineDefaultsByAgent}
 											onSaveTitle={onSaveTitle}
 											onClick={() => {
 												if (column.id === "backlog") {

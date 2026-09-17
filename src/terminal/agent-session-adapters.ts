@@ -734,6 +734,7 @@ const claudeAdapter: AgentSessionAdapter = {
 		}
 
 		// Per-task model/effort overrides, passed verbatim. User/workspace args win.
+		// Inherit (no card pin): omit --model/--effort so Claude uses its machine default.
 		// Claude Code CLI reference: https://code.claude.com/docs/en/cli-reference
 		applyCliOptionOverride(args, input.agentSettings?.modelId, ["--model"]);
 		applyCliOptionOverride(args, input.agentSettings?.reasoningEffort, ["--effort"]);
@@ -812,6 +813,8 @@ const codexAdapter: AgentSessionAdapter = {
 		}
 
 		// Per-task model/effort overrides, passed verbatim. User/workspace args win.
+		// Inherit means "whatever ~/.codex/config.toml says". Never pass -m/--model unless
+		// the card pinned a model — ChatGPT-account auth 400s on -m of the config default.
 		// Codex CLI reference: https://developers.openai.com/codex/cli/reference
 		applyCliOptionOverride(codexArgs, input.agentSettings?.modelId, ["-m", "--model"]);
 		if (input.agentSettings?.reasoningEffort && !hasCodexConfigOverride(codexArgs, "model_reasoning_effort")) {
@@ -1623,7 +1626,8 @@ const grokAdapter: AgentSessionAdapter = {
 		}
 
 		// Per-task model/effort overrides, passed verbatim. Grok accepts --model/-m
-		// and --reasoning-effort/--effort. User/workspace args win.
+		// and --reasoning-effort/--effort. User/workspace args win. Inherit: omit flags
+		// so Grok uses ~/.grok/config.toml [models] default / default_reasoning_effort.
 		applyCliOptionOverride(args, input.agentSettings?.modelId, ["--model", "-m"]);
 		applyCliOptionOverride(args, input.agentSettings?.reasoningEffort, ["--reasoning-effort", "--effort"]);
 

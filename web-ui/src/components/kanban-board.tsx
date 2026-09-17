@@ -8,13 +8,13 @@ import {
 	type SensorAPI,
 	type SnapDragActions,
 } from "@hello-pangea/dnd";
+import type { AgentMachineDefaultsById } from "@runtime-agent-machine-defaults";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-
 import { BoardColumn } from "@/components/board-column";
 import { DependencyOverlay } from "@/components/dependencies/dependency-overlay";
 import { useDependencyLinking } from "@/components/dependencies/use-dependency-linking";
-import type { RuntimeTaskSessionSummary } from "@/runtime/types";
+import type { RuntimeAgentId, RuntimeTaskSessionSummary } from "@/runtime/types";
 import { canCreateTaskDependency } from "@/state/board-state";
 import { findCardColumnId, type ProgrammaticCardMoveInFlight } from "@/state/drag-rules";
 import { isTaskReadyNow, remapBacklogDragSourceIndex } from "@/state/ready-now";
@@ -57,6 +57,8 @@ export function KanbanBoard({
 	onRequestProgrammaticCardMoveReady,
 	workspacePath,
 	defaultClineModelId,
+	defaultAgentId,
+	machineDefaultsByAgent,
 	panelReviewEnabled,
 }: {
 	data: BoardData;
@@ -85,6 +87,8 @@ export function KanbanBoard({
 	onRequestProgrammaticCardMoveReady?: (requestMove: RequestProgrammaticCardMove | null) => void;
 	workspacePath?: string | null;
 	defaultClineModelId?: string | null;
+	defaultAgentId?: RuntimeAgentId | null;
+	machineDefaultsByAgent?: AgentMachineDefaultsById;
 	panelReviewEnabled?: boolean;
 }): React.ReactElement {
 	const dragOccurredRef = useRef(false);
@@ -433,6 +437,8 @@ export function KanbanBoard({
 						isDependencyLinking={dependencyLinking.draft !== null}
 						workspacePath={workspacePath}
 						defaultClineModelId={defaultClineModelId}
+						defaultAgentId={defaultAgentId}
+						machineDefaultsByAgent={machineDefaultsByAgent}
 						readyNowFilter={column.id === "backlog" ? readyNowFilter : undefined}
 						onToggleReadyNowFilter={
 							column.id === "backlog" ? () => setReadyNowFilter((current) => !current) : undefined

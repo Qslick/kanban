@@ -1,12 +1,12 @@
 import { type BeforeCapture, DragDropContext, Droppable, type DropResult } from "@hello-pangea/dnd";
+import type { AgentMachineDefaultsById } from "@runtime-agent-machine-defaults";
 import { ChevronDown, ChevronRight, Play, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-
 import { BoardCard } from "@/components/board-card";
 import { Button } from "@/components/ui/button";
 import { ColumnIndicator } from "@/components/ui/column-indicator";
-import type { RuntimeTaskSessionSummary } from "@/runtime/types";
+import type { RuntimeAgentId, RuntimeTaskSessionSummary } from "@/runtime/types";
 import { findCardColumnId, isCardDropDisabled } from "@/state/drag-rules";
 import type { BoardCard as BoardCardModel, BoardColumn, BoardColumnId, CardSelection } from "@/types";
 
@@ -34,6 +34,8 @@ function ColumnSection({
 	activeDragSourceColumnId,
 	workspacePath,
 	defaultClineModelId,
+	defaultAgentId,
+	machineDefaultsByAgent,
 }: {
 	column: BoardColumn;
 	selectedCardId: string;
@@ -58,6 +60,8 @@ function ColumnSection({
 	activeDragSourceColumnId?: BoardColumnId | null;
 	workspacePath?: string | null;
 	defaultClineModelId?: string | null;
+	defaultAgentId?: RuntimeAgentId | null;
+	machineDefaultsByAgent?: AgentMachineDefaultsById;
 }): React.ReactElement {
 	const [open, setOpen] = useState(defaultOpen);
 	const canCreate = column.id === "backlog" && onCreateTask;
@@ -200,6 +204,8 @@ function ColumnSection({
 												isMoveToTrashLoading={moveToTrashLoadingById?.[card.id] ?? false}
 												workspacePath={workspacePath}
 												defaultClineModelId={defaultClineModelId}
+												defaultAgentId={defaultAgentId}
+												machineDefaultsByAgent={machineDefaultsByAgent}
 												onSaveTitle={onSaveTitle}
 												onClick={() => {
 													if (column.id === "backlog") {
@@ -231,6 +237,8 @@ export function ColumnContextPanel({
 	selection,
 	workspacePath,
 	defaultClineModelId,
+	defaultAgentId,
+	machineDefaultsByAgent,
 	onCardSelect,
 	taskSessions,
 	onTaskDragEnd,
@@ -273,6 +281,8 @@ export function ColumnContextPanel({
 	moveToTrashLoadingById?: Record<string, boolean>;
 	panelWidth?: string;
 	defaultClineModelId?: string | null;
+	defaultAgentId?: RuntimeAgentId | null;
+	machineDefaultsByAgent?: AgentMachineDefaultsById;
 }): React.ReactElement {
 	const [activeDragSourceColumnId, setActiveDragSourceColumnId] = useState<BoardColumnId | null>(null);
 	const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -363,6 +373,8 @@ export function ColumnContextPanel({
 							activeDragSourceColumnId={activeDragSourceColumnId}
 							workspacePath={workspacePath}
 							defaultClineModelId={defaultClineModelId}
+							defaultAgentId={defaultAgentId}
+							machineDefaultsByAgent={machineDefaultsByAgent}
 						/>
 					))}
 				</div>

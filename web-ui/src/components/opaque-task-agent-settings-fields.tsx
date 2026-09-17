@@ -1,6 +1,7 @@
+import { formatMachineDefaultHint } from "@runtime-agent-machine-defaults";
 import type { ReactElement } from "react";
 
-import type { RuntimeTaskAgentSettings } from "@/runtime/types";
+import type { RuntimeAgentMachineDefaults, RuntimeTaskAgentSettings } from "@/runtime/types";
 
 export function OpaqueTaskAgentSettingsFields({
 	agentSettings,
@@ -10,6 +11,7 @@ export function OpaqueTaskAgentSettingsFields({
 	showEffortInput,
 	onModelChange,
 	onEffortChange,
+	machineDefaults,
 }: {
 	agentSettings: RuntimeTaskAgentSettings | undefined;
 	agentLabel: string;
@@ -18,10 +20,24 @@ export function OpaqueTaskAgentSettingsFields({
 	showEffortInput: boolean;
 	onModelChange: (value: string) => void;
 	onEffortChange: (value: string) => void;
+	machineDefaults?: RuntimeAgentMachineDefaults | null;
 }): ReactElement | null {
 	if (!showModelInput && !showEffortInput) {
 		return null;
 	}
+
+	const modelPlaceholder =
+		formatMachineDefaultHint({
+			modelId: machineDefaults?.displayModel ?? machineDefaults?.modelId ?? null,
+			reasoningEffort: null,
+			source: machineDefaults?.source ?? "unknown",
+		}) ?? "Model ID";
+	const effortPlaceholder =
+		formatMachineDefaultHint({
+			modelId: null,
+			reasoningEffort: machineDefaults?.reasoningEffort ?? null,
+			source: machineDefaults?.source ?? "unknown",
+		}) ?? "Effort level";
 
 	return (
 		<div className="flex flex-col gap-2">
@@ -33,7 +49,7 @@ export function OpaqueTaskAgentSettingsFields({
 							type="text"
 							value={agentSettings?.modelId ?? ""}
 							onChange={(e) => onModelChange(e.currentTarget.value)}
-							placeholder="Model ID"
+							placeholder={modelPlaceholder}
 							aria-label="Model override"
 							className="w-full rounded-md border border-border bg-surface-2 px-2 py-1.5 text-[12px] text-text-primary placeholder:text-text-tertiary focus:border-border-focus focus:outline-none"
 						/>
@@ -46,13 +62,14 @@ export function OpaqueTaskAgentSettingsFields({
 							type="text"
 							value={agentSettings?.reasoningEffort ?? ""}
 							onChange={(e) => onEffortChange(e.currentTarget.value)}
-							placeholder="Effort level"
+							placeholder={effortPlaceholder}
 							aria-label="Reasoning effort override"
 							className="w-full rounded-md border border-border bg-surface-2 px-2 py-1.5 text-[12px] text-text-primary placeholder:text-text-tertiary focus:border-border-focus focus:outline-none"
 						/>
 					</div>
 				) : null}
 			</div>
+			<p className="m-0 text-[11px] text-text-tertiary">Empty inherits this agent's machine default.</p>
 			{docsUrl ? (
 				<a
 					href={docsUrl}

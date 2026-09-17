@@ -6,6 +6,7 @@ import * as RadixPopover from "@radix-ui/react-popover";
 import * as RadixSelect from "@radix-ui/react-select";
 import * as RadixSwitch from "@radix-ui/react-switch";
 import { getRuntimeAgentCatalogEntry, getRuntimeLaunchSupportedAgentCatalog } from "@runtime-agent-catalog";
+import { formatMachineDefaultHint } from "@runtime-agent-machine-defaults";
 import { DEFAULT_MAX_IN_PROGRESS_TASKS, normalizeMaxInProgressTasks } from "@runtime-in-progress-cap";
 import {
 	arePanelReviewFamiliesEqual,
@@ -74,6 +75,7 @@ interface RuntimeSettingsAgentRowModel {
 	binary: string;
 	command: string;
 	installed: boolean | null;
+	machineDefaultHint?: string | null;
 }
 
 function quoteCommandPartForDisplay(part: string): string {
@@ -210,6 +212,9 @@ function AgentRow({
 					</div>
 					{agent.command ? (
 						<p className="text-text-secondary font-mono text-xs mt-0.5 m-0">{agent.command}</p>
+					) : null}
+					{isSelected && agent.machineDefaultHint ? (
+						<p className="text-text-tertiary text-xs mt-0.5 m-0">{agent.machineDefaultHint}</p>
 					) : null}
 				</div>
 			</div>
@@ -429,6 +434,7 @@ export function RuntimeSettingsDialog({
 				label: agent.label,
 				binary: agent.binary,
 				installed: agent.id === "cline" ? true : agent.installed,
+				machineDefaultHint: formatMachineDefaultHint(agent.machineDefaults),
 			})) ??
 			getRuntimeLaunchSupportedAgentCatalog().map((agent) => ({
 				id: agent.id,

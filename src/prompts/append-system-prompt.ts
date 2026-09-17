@@ -270,7 +270,7 @@ Notes:
 
 ## agents
 
-Purpose: list every known coding agent with its install/config state, launch support, and per-task override mechanisms. Run it before setting model or effort overrides to check that the target agent supports them.
+Purpose: list every known coding agent with its install/config state, launch support, per-task override mechanisms, and this computer's current machine-default model and effort. Run it before creating tickets or setting model/effort overrides.
 
 Command:
 \`${kanbanCommand} agents [--project-path <path>]\`
@@ -278,8 +278,11 @@ Command:
 Each entry contains:
 - \`id\`, \`label\`: agent identity.
 - \`installed\`, \`configured\`, \`launchSupported\`: state.
+- \`machineDefaults.modelId\` and \`machineDefaults.reasoningEffort\`: this computer's current default for that agent, or null if unknown. \`machineDefaults.source\` is \`claude-settings\`, \`codex-config\`, \`grok-config\`, \`cline-sdk\`, or \`unknown\`.
 - \`capabilities.modelOverride\` and \`capabilities.effortOverride\`: \`flag\`, \`config\`, \`sdk\`, or \`none\`. \`none\` means Kanban cannot pass that override to the agent at launch.
 - \`capabilities.docsUrl\`: the agent's official CLI reference. Use it to verify model names and effort vocabularies.
+
+Omit \`--model\`/\`--effort\` to inherit \`machineDefaults\`. Pin only when you intend a different pair. Never copy the machine default onto the card just to make it visible.
 
 ## task done
 
@@ -381,15 +384,20 @@ Notes:
 
 Tasks can override the workspace default agent, and additionally carry per-task provider, model, and reasoning-effort settings. Kanban stores these values on the card and passes them verbatim to whichever agent launches the task. Kanban never validates model IDs or effort vocabularies — that is each agent's job at launch.
 
-When the user names a specific agent, provider, model, or effort for a task, set it with \`--agent-id\`, \`--provider\`, \`--model\`, and \`--effort\` on \`task create\` or \`task update\` instead of inheriting the workspace default.
+Most tickets will be created by you. Size the model to the ticket:
+
+1. Run \`${kanbanCommand} agents\` and read each agent's \`machineDefaults\` (this computer's current default model and effort) plus \`capabilities\`.
+2. Default: omit \`--model\` and \`--effort\` so the card inherits that agent's machine default **now**. High-end machine defaults are correct for hard tickets. Do not copy the machine default onto the card just to make it visible — leave the fields unset so a later change to the provider default still applies.
+3. For small/mechanical tickets (typo, single-file, tests-only, docs, config), set \`--model\` and \`--effort\` to a cheaper valid pair for that agent — only if \`capabilities.modelOverride\` / \`capabilities.effortOverride\` are not \`none\`. Do not invent IDs; prefer values you already know are valid for that CLI, or skip the override and inherit.
+4. After \`task create\` or \`task update\`, read the JSON response and confirm \`agentSettings\` is either omitted (inherit) or exactly the pin you intended. If they differ, report the mismatch instead of silently continuing.
+
+When the user names a specific agent, provider, model, or effort for a task, set it with \`--agent-id\`, \`--provider\`, \`--model\`, and \`--effort\` on \`task create\` or \`task update\` instead of inheriting.
 
 Follow this process whenever you set model or effort overrides:
 
 1. Run \`${kanbanCommand} agents\` and check the target agent's \`capabilities.modelOverride\` and \`capabilities.effortOverride\`.
 2. If a mechanism is \`none\`, Kanban cannot pass that override. Warn the user, and if they still want that model/effort behavior, propose the nearest agent whose mechanism is not \`none\`.
 3. You are expected to know current model names and effort vocabularies from your own knowledge. When you are uncertain, or the user names something you do not recognize, verify it against the agent's official docs (the \`capabilities.docsUrl\` from \`${kanbanCommand} agents\`, or web research) BEFORE writing it to the card. Never invent or guess a model ID.
-
-After \`task create\` or \`task update\`, read the JSON response and confirm the echoed \`agentSettings\` match what you asked for. If they differ, report the mismatch to the user instead of silently continuing.
 
 After \`task start\`, if the session errors because the agent rejected a model or effort value, surface the agent's own error message and offer a corrected \`task update\` with a valid value. Kanban does not second-guess values, so only the agent's rejection tells you a value was wrong.
 
@@ -411,9 +419,10 @@ ${kanbanCommand} task update --task-id <task_id> --model <model_id>
 
 Notes:
 - \`--provider\` is only read by some agents (Cline and OpenCode). For other agents it is stored but ignored; \`${kanbanCommand} agents\` tells you which agents support what.
-- Omit all override flags to inherit the workspace default agent and settings.
+- Omit all override flags to inherit the workspace default agent and that agent's current machine-default model and effort.
 - On \`task update\`, use \`--agent-id default\` to clear a per-task agent override, \`--provider default\` / \`--model default\` to clear those overrides, and \`--effort default\` or \`--effort inherit\` to clear the reasoning-effort override.
 - Values are stored and passed exactly as given. Do not normalize, alias, or translate model names or effort levels yourself.
+- Codex inherit means whatever that agent's config file currently says. Never pass \`-m\` unless the card pinned a model.
 
 # Workflow Notes
 

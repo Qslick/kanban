@@ -35,6 +35,7 @@ Install this checkout with `npm run link`. Roll back to the published binary wit
 | feat/panel-review-settings | Review-column panel toggle, families, inherit/off/custom, CLI flags |
 | feat/panel-review-runtime | Fail-closed panel gate before auto-review commit/PR |
 | feat/session-hygiene | teardown, process-tree kill, worktree cleanup under load |
+| feat/machine-default-model-effort | Probe provider machine-default model/effort; inherit unless the card pins |
 
 ## Skipped
 

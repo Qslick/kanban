@@ -18,7 +18,9 @@ function toErrorMessage(error: unknown): string {
 export function registerAgentsCommand(program: Command): void {
 	program
 		.command("agents")
-		.description("List known coding agents, their launch support, and per-task override mechanisms.")
+		.description(
+			"List known coding agents, launch support, per-task override mechanisms, and probed machine-default model/effort.",
+		)
 		.option("--project-path <path>", "Workspace path. Defaults to current directory workspace.")
 		.action(async (options: { projectPath?: string }) => {
 			try {

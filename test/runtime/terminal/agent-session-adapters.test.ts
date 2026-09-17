@@ -1201,6 +1201,47 @@ describe("per-task agentSettings overrides", () => {
 		expect(launch.args).not.toContain("--model");
 	});
 
+	it("does not inject probed machine defaults onto argv when the card inherits", async () => {
+		setupTempHome();
+
+		const claudeLaunch = await prepareAgentLaunch({
+			taskId: "task-claude-inherit",
+			agentId: "claude",
+			binary: "claude",
+			args: [],
+			cwd: "/tmp",
+			prompt: "",
+		});
+		expect(claudeLaunch.args).not.toContain("--model");
+		expect(claudeLaunch.args).not.toContain("--effort");
+
+		const grokLaunch = await prepareAgentLaunch({
+			taskId: "task-grok-inherit",
+			agentId: "grok",
+			binary: "grok",
+			args: [],
+			cwd: "/tmp",
+			prompt: "",
+		});
+		expect(grokLaunch.args).not.toContain("--model");
+		expect(grokLaunch.args).not.toContain("-m");
+		expect(grokLaunch.args).not.toContain("--effort");
+		expect(grokLaunch.args).not.toContain("--reasoning-effort");
+
+		const codexLaunch = await prepareAgentLaunch({
+			taskId: "task-codex-inherit",
+			agentId: "codex",
+			binary: "codex",
+			args: [],
+			cwd: "/tmp",
+			prompt: "",
+		});
+		expect(codexLaunch.args).not.toContain("-m");
+		expect(codexLaunch.args).not.toContain("--model");
+		expect(codexLaunch.args.some((arg) => arg.startsWith("model_reasoning_effort="))).toBe(false);
+		expect(codexLaunch.args.some((arg) => arg.includes("model_reasoning_effort="))).toBe(false);
+	});
+
 	it("kiro: emits a visible session warning when settings are present; none when absent", async () => {
 		setupTempHome();
 		const withSettings = await prepareAgentLaunch({
