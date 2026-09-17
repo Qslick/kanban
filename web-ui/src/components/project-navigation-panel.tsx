@@ -321,15 +321,15 @@ export function ProjectNavigationPanel({
 						/>
 					) : null}
 				</div>
-				<div className="mt-2 rounded-md bg-surface-2 border border-border p-1">
-					<div className="grid grid-cols-2 gap-1">
+				<div className="mt-2.5 rounded-lg bg-surface-0/70 border border-border/80 p-0.5 shadow-inner">
+					<div className="grid grid-cols-2 gap-0.5">
 						<button
 							type="button"
 							onClick={() => onActiveSectionChange("projects")}
 							className={cn(
-								"cursor-pointer rounded-sm px-2 py-1 text-xs font-medium",
+								"cursor-pointer rounded-md py-1.5 text-xs font-medium transition-all text-center",
 								activeSection === "projects"
-									? "bg-surface-4 text-text-primary border border-border"
+									? "bg-surface-2 text-text-primary border border-border/80 shadow-xs font-semibold"
 									: "text-text-secondary hover:text-text-primary border border-transparent",
 							)}
 						>
@@ -340,9 +340,9 @@ export function ProjectNavigationPanel({
 							onClick={() => onActiveSectionChange("agent")}
 							disabled={!canShowAgentSection}
 							className={cn(
-								"cursor-pointer rounded-sm px-2 py-1 text-xs font-medium",
+								"cursor-pointer rounded-md py-1.5 text-xs font-medium transition-all text-center",
 								activeSection === "agent"
-									? "bg-surface-4 text-text-primary border border-border"
+									? "bg-surface-2 text-text-primary border border-border/80 shadow-xs font-semibold"
 									: "text-text-secondary hover:text-text-primary border border-transparent",
 								!canShowAgentSection ? "cursor-not-allowed opacity-50" : null,
 							)}
@@ -614,7 +614,7 @@ const MORE_SHORTCUTS = [
 
 function ShortcutHint({ keys, label }: { keys: string[]; label: string }): React.ReactElement {
 	return (
-		<div className="flex justify-between items-center py-px">
+		<div className="flex justify-between items-center py-0.5">
 			<span className="text-text-tertiary text-xs">{label}</span>
 			<span className="inline-flex items-center gap-0.5">
 				{keys.map((key, i) => (
@@ -629,8 +629,8 @@ function ShortcutsCard(): React.ReactElement {
 	const [expanded, setExpanded] = useState(false);
 
 	return (
-		<div style={{ padding: "8px 12px" }}>
-			<div style={{ padding: "0 8px" }}>
+		<div style={{ padding: "6px 12px 8px" }}>
+			<div className="rounded-lg border border-border/70 bg-surface-2/40 p-2.5 shadow-xs">
 				<div className="flex flex-col gap-0.5">
 					{ESSENTIAL_SHORTCUTS.map((s) => (
 						<ShortcutHint key={s.label} keys={s.keys} label={s.label} />
@@ -638,7 +638,7 @@ function ShortcutsCard(): React.ReactElement {
 				</div>
 				<Collapsible.Root open={expanded} onOpenChange={setExpanded}>
 					<Collapsible.Content>
-						<div className="flex flex-col gap-0.5">
+						<div className="flex flex-col gap-0.5 mt-1 pt-1.5 border-t border-border/50">
 							{MORE_SHORTCUTS.map((s) => (
 								<ShortcutHint key={s.label} keys={s.keys} label={s.label} />
 							))}
@@ -647,7 +647,7 @@ function ShortcutsCard(): React.ReactElement {
 					<Collapsible.Trigger asChild>
 						<button
 							type="button"
-							className="flex items-center gap-1 mt-1.5 text-xs text-text-tertiary hover:text-text-secondary cursor-pointer bg-transparent border-none p-0"
+							className="flex items-center gap-1 mt-2 text-[11px] font-medium text-text-tertiary hover:text-text-secondary cursor-pointer bg-transparent border-none p-0 transition-colors"
 						>
 							{expanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
 							{expanded ? "Less" : "All shortcuts"}
@@ -755,29 +755,37 @@ function ProjectRow({
 					onSelect(project.id);
 				}
 			}}
-			className={cn("kb-project-row cursor-pointer rounded-md", isCurrent && "kb-project-row-selected")}
+			className={cn(
+				"kb-project-row group relative flex items-center gap-2 rounded-lg cursor-pointer transition-all",
+				isCurrent
+					? "kb-project-row-selected border border-accent/35 shadow-xs"
+					: "hover:bg-surface-2/70 border border-transparent",
+			)}
 			style={{
-				display: "flex",
-				alignItems: "center",
-				gap: 6,
 				padding: "6px 8px",
 			}}
 		>
+			{isCurrent ? <span className="absolute left-0 top-2 bottom-2 w-0.75 rounded-r-full bg-accent" /> : null}
+			<div
+				className={cn(
+					"w-7 h-7 rounded-md flex items-center justify-center text-xs font-semibold shrink-0 transition-colors",
+					isCurrent
+						? "bg-accent/20 text-accent font-bold"
+						: "bg-surface-3/80 text-text-secondary group-hover:text-text-primary",
+				)}
+			>
+				{project.name ? project.name.slice(0, 1).toUpperCase() : "P"}
+			</div>
 			<div className="flex-1 min-w-0">
 				<div
 					className={cn(
 						"font-medium whitespace-nowrap overflow-hidden text-ellipsis text-sm",
-						isCurrent ? "text-accent-fg" : "text-text-primary",
+						isCurrent ? "text-text-primary font-semibold" : "text-text-primary",
 					)}
 				>
 					{project.name}
 				</div>
-				<div
-					className={cn(
-						"font-mono text-[10px] whitespace-nowrap overflow-hidden text-ellipsis",
-						isCurrent ? "text-accent-fg/60" : "text-text-secondary",
-					)}
-				>
+				<div className="font-mono text-[10px] whitespace-nowrap overflow-hidden text-ellipsis text-text-secondary">
 					{displayPath}
 				</div>
 				{taskCountBadges.length > 0 ? (
@@ -786,8 +794,8 @@ function ProjectRow({
 							<span
 								key={badge.id}
 								className={cn(
-									"inline-flex items-center gap-1 rounded-full text-[10px] px-1.5 py-px font-medium",
-									isCurrent ? "bg-accent-fg/20 text-accent-fg" : badge.toneClassName,
+									"inline-flex items-center gap-1 rounded-full text-[10px] px-1.5 py-px font-medium border border-border/40",
+									isCurrent ? "bg-accent/15 text-accent border-accent/30" : badge.toneClassName,
 								)}
 								title={badge.title}
 							>
@@ -807,11 +815,10 @@ function ProjectRow({
 							size="sm"
 							icon={isRemovingProject ? <Spinner size={12} /> : <Ellipsis size={14} />}
 							disabled={hasAnyProjectRemoval && !isRemovingProject}
-							className={
-								isCurrent
-									? "text-accent-fg hover:bg-accent-fg/20 hover:text-accent-fg active:bg-accent-fg/30"
-									: undefined
-							}
+							className={cn(
+								"h-6 w-6 text-text-secondary hover:text-text-primary",
+								isCurrent && "hover:bg-accent/15",
+							)}
 							onClick={(e) => {
 								e.stopPropagation();
 							}}

@@ -436,8 +436,8 @@ export function ClineChatComposer({
 	return (
 		<div
 			className={cn(
-				"rounded-xl border border-border bg-surface-2 px-3 py-2 focus-within:border-border-focus",
-				isDragOver && "border-border-focus bg-surface-3/50",
+				"rounded-xl border border-border/80 bg-surface-2 px-3.5 py-2.5 shadow-sm transition-all focus-within:border-border-focus focus-within:ring-1 focus-within:ring-border-focus/40 focus-within:shadow-md",
+				isDragOver && "border-border-focus bg-surface-3/50 ring-2 ring-border-focus/50",
 			)}
 			onDragEnter={(event) => {
 				event.preventDefault();
@@ -526,7 +526,7 @@ export function ClineChatComposer({
 							}
 						>
 							<div
-								className="inline-flex h-7 shrink-0 items-center rounded-md border border-border-bright bg-surface-3 p-0.5"
+								className="inline-flex h-7 shrink-0 items-center rounded-lg border border-border/80 bg-surface-0/60 p-0.5 shadow-inner"
 								role="tablist"
 								aria-label="Cline mode"
 							>
@@ -535,10 +535,10 @@ export function ClineChatComposer({
 									role="tab"
 									aria-selected={mode === "plan"}
 									className={cn(
-										"h-5 rounded-sm px-2 text-[11px] font-medium hover:cursor-pointer",
+										"h-5.5 rounded-md px-2.5 text-[11px] font-medium transition-all hover:cursor-pointer",
 										mode === "plan"
-											? "bg-surface-1 text-text-primary"
-											: "text-text-secondary hover:bg-surface-4 hover:text-text-primary",
+											? "bg-surface-2 text-text-primary border border-border-bright/60 shadow-xs font-semibold"
+											: "text-text-secondary hover:text-text-primary hover:bg-surface-3/50",
 									)}
 									onClick={() => onModeChange("plan")}
 								>
@@ -549,10 +549,10 @@ export function ClineChatComposer({
 									role="tab"
 									aria-selected={mode === "act"}
 									className={cn(
-										"h-5 rounded-sm px-2 text-[11px] font-medium hover:cursor-pointer",
+										"h-5.5 rounded-md px-2.5 text-[11px] font-medium transition-all hover:cursor-pointer",
 										mode === "act"
-											? "bg-surface-1 text-text-primary"
-											: "text-text-secondary hover:bg-surface-4 hover:text-text-primary",
+											? "bg-surface-2 text-text-primary border border-border-bright/60 shadow-xs font-semibold"
+											: "text-text-secondary hover:text-text-primary hover:bg-surface-3/50",
 									)}
 									onClick={() => onModeChange("act")}
 								>
@@ -562,9 +562,13 @@ export function ClineChatComposer({
 						</Tooltip>
 					) : null}
 					<Button
-						variant="default"
+						variant={canCancel ? "danger" : canSubmit ? "primary" : "default"}
 						size="sm"
-						className="h-7 w-7 rounded-full border-border-bright bg-surface-4 p-0 text-text-primary hover:bg-surface-3"
+						className={cn(
+							"h-7 w-7 rounded-full p-0 transition-all",
+							canSubmit && !canCancel && "shadow-xs",
+							!canSubmit && !canCancel && "opacity-40 border-border bg-surface-3 text-text-tertiary",
+						)}
 						aria-label={canCancel ? "Cancel request" : "Send message"}
 						disabled={canCancel ? false : !canSubmit}
 						onClick={() => {
@@ -575,7 +579,7 @@ export function ClineChatComposer({
 							void onSend();
 						}}
 						icon={
-							isSending ? <Spinner size={12} /> : canCancel ? <Pause size={14} /> : <SendHorizontal size={14} />
+							isSending ? <Spinner size={12} /> : canCancel ? <Pause size={13} /> : <SendHorizontal size={13} />
 						}
 					/>
 				</div>
