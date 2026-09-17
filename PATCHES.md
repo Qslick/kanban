@@ -20,6 +20,8 @@ Install this checkout with `npm run link`. Roll back to the published binary wit
 | #558 unique part | Recover Cline restart config from the persisted session after a process restart. Duplicate `stripIncompleteToolTurns` skipped (already in #640) |
 | #559 ported | Failed sessions stay in Review (runtime auto-review gate + red card indicator). The original PR targeted a deleted UI hook |
 | Issue #473 | AND dependency auto-start: a Backlog card starts only when every linked Review prerequisite is Done |
+| #592 | Agent-agnostic per-task model and effort wiring. Prerequisite for Grok |
+| #603 unique commits | Grok Build CLI as a launch-supported runtime agent |
 
 ## Skipped
 
@@ -32,7 +34,8 @@ Install this checkout with `npm run link`. Roll back to the published binary wit
 | #324 | Large review-resume rewrite overlapping the #611 terminal stack; re-evaluate if review resume is still broken |
 | Desktop auto-update (#440, #464–#468) | This fork runs the CLI |
 | Extra agent runtimes (Pi, AG2, Kimi, Cursor, Copilot, Hermes, Prime, qwen, Kiro) | Not used here |
+| #643 Cline CLI | Cherry-pick conflicted: the unique commit also deletes AGENTS.md / DEVELOPMENT.md and depends on unrelated cline-sdk cache PRs. Revisit as a surgical patch |
 
 ## Planned
 
-Wave 3: #592, #603, #643 (Grok Build CLI + Cline CLI)
+None. Revisit Cline CLI (#643) only if you start using `cline` as a board agent.

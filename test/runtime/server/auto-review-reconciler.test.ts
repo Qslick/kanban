@@ -436,6 +436,8 @@ describe("auto-review reconciler", () => {
 					exitCode: 1,
 					lastHookAt: 1,
 					latestHookActivity: null,
+					modelId: null,
+					reasoningEffort: null,
 				},
 			},
 		});
@@ -475,6 +477,8 @@ describe("auto-review reconciler", () => {
 					exitCode: 1,
 					lastHookAt: 1,
 					latestHookActivity: null,
+					modelId: null,
+					reasoningEffort: null,
 				},
 			},
 		});
