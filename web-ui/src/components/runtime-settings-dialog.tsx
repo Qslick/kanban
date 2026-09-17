@@ -6,6 +6,7 @@ import * as RadixPopover from "@radix-ui/react-popover";
 import * as RadixSelect from "@radix-ui/react-select";
 import * as RadixSwitch from "@radix-ui/react-switch";
 import { getRuntimeAgentCatalogEntry, getRuntimeLaunchSupportedAgentCatalog } from "@runtime-agent-catalog";
+import { DEFAULT_MAX_IN_PROGRESS_TASKS, normalizeMaxInProgressTasks } from "@runtime-in-progress-cap";
 import { areRuntimeProjectShortcutsEqual } from "@runtime-shortcuts";
 import {
 	Bell,
@@ -369,6 +370,7 @@ export function RuntimeSettingsDialog({
 	const [selectedAgentId, setSelectedAgentId] = useState<RuntimeAgentId>("claude");
 	const [agentAutonomousModeEnabled, setAgentAutonomousModeEnabled] = useState(true);
 	const [readyForReviewNotificationsEnabled, setReadyForReviewNotificationsEnabled] = useState(true);
+	const [maxInProgressTasks, setMaxInProgressTasks] = useState(DEFAULT_MAX_IN_PROGRESS_TASKS);
 	const [initialThemeId, setInitialThemeId] = useState<ThemeId>(readStoredThemeId);
 	const [draftThemeId, setDraftThemeId] = useState<ThemeId>(readStoredThemeId);
 	const [notificationPermission, setNotificationPermission] = useState<BrowserNotificationPermission>("unsupported");
@@ -442,6 +444,7 @@ export function RuntimeSettingsDialog({
 	const initialSelectedAgentId = configuredAgentId ?? fallbackAgentId;
 	const initialAgentAutonomousModeEnabled = config?.agentAutonomousModeEnabled ?? true;
 	const initialReadyForReviewNotificationsEnabled = config?.readyForReviewNotificationsEnabled ?? true;
+	const initialMaxInProgressTasks = config?.maxInProgressTasks ?? DEFAULT_MAX_IN_PROGRESS_TASKS;
 	const initialShortcuts = config?.shortcuts ?? [];
 	const initialCommitPromptTemplate = config?.commitPromptTemplate ?? "";
 	const initialOpenPrPromptTemplate = config?.openPrPromptTemplate ?? "";
@@ -468,6 +471,9 @@ export function RuntimeSettingsDialog({
 			return true;
 		}
 		if (readyForReviewNotificationsEnabled !== initialReadyForReviewNotificationsEnabled) {
+			return true;
+		}
+		if (maxInProgressTasks !== initialMaxInProgressTasks) {
 			return true;
 		}
 		if (clineSettings.hasUnsavedChanges) {
@@ -501,11 +507,13 @@ export function RuntimeSettingsDialog({
 		draftThemeId,
 		initialAgentAutonomousModeEnabled,
 		initialCommitPromptTemplate,
+		initialMaxInProgressTasks,
 		initialOpenPrPromptTemplate,
 		initialReadyForReviewNotificationsEnabled,
 		initialSelectedAgentId,
 		initialShortcuts,
 		initialThemeId,
+		maxInProgressTasks,
 		openPrPromptTemplate,
 		readyForReviewNotificationsEnabled,
 		selectedAgentId,
@@ -519,6 +527,7 @@ export function RuntimeSettingsDialog({
 		setSelectedAgentId(configuredAgentId ?? fallbackAgentId);
 		setAgentAutonomousModeEnabled(config?.agentAutonomousModeEnabled ?? true);
 		setReadyForReviewNotificationsEnabled(config?.readyForReviewNotificationsEnabled ?? true);
+		setMaxInProgressTasks(config?.maxInProgressTasks ?? DEFAULT_MAX_IN_PROGRESS_TASKS);
 		setShortcuts(config?.shortcuts ?? []);
 		setCommitPromptTemplate(config?.commitPromptTemplate ?? "");
 		setOpenPrPromptTemplate(config?.openPrPromptTemplate ?? "");
@@ -526,6 +535,7 @@ export function RuntimeSettingsDialog({
 	}, [
 		config?.agentAutonomousModeEnabled,
 		config?.commitPromptTemplate,
+		config?.maxInProgressTasks,
 		config?.openPrPromptTemplate,
 		config?.readyForReviewNotificationsEnabled,
 		config?.selectedAgentId,
@@ -701,6 +711,7 @@ export function RuntimeSettingsDialog({
 			selectedAgentId,
 			agentAutonomousModeEnabled,
 			readyForReviewNotificationsEnabled,
+			maxInProgressTasks: normalizeMaxInProgressTasks(maxInProgressTasks),
 			shortcuts,
 			commitPromptTemplate,
 			openPrPromptTemplate,
@@ -811,6 +822,36 @@ export function RuntimeSettingsDialog({
 						</label>
 						<p className="text-text-secondary text-[13px] ml-6 mt-0 mb-0">
 							Allows agents to use tools without stopping for permission. Use at your own risk.
+						</p>
+					</div>
+					<div className="rounded-lg border border-border bg-surface-0 px-4 py-3 mb-4">
+						<h6 className="text-[12px] font-semibold uppercase tracking-wider text-text-secondary m-0 mb-1">
+							Concurrency
+						</h6>
+						<label
+							htmlFor="runtime-settings-max-in-progress-tasks"
+							className="flex items-center justify-between gap-3 text-[13px] text-text-primary mt-2"
+						>
+							<span>Maximum in-progress tasks</span>
+							<input
+								id="runtime-settings-max-in-progress-tasks"
+								type="number"
+								min={1}
+								step={1}
+								value={maxInProgressTasks}
+								disabled={controlsDisabled}
+								onChange={(event) => {
+									const parsed = Number.parseInt(event.target.value, 10);
+									if (!Number.isFinite(parsed)) {
+										return;
+									}
+									setMaxInProgressTasks(normalizeMaxInProgressTasks(parsed));
+								}}
+								className="h-8 w-20 rounded-md border border-border bg-surface-2 px-2 text-[13px] text-text-primary focus:border-border-focus focus:outline-none disabled:opacity-40"
+							/>
+						</label>
+						<p className="text-text-secondary text-[13px] mt-1 mb-0">
+							Limits how many cards can be In Progress at once. Running tasks are not stopped if you lower this.
 						</p>
 					</div>
 

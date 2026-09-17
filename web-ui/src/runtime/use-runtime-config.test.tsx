@@ -23,6 +23,7 @@ function createRuntimeConfigResponse(selectedAgentId: RuntimeConfigResponse["sel
 		globalConfigPath: "/tmp/global-config.json",
 		projectConfigPath: "/tmp/project/.cline/kanban/config.json",
 		readyForReviewNotificationsEnabled: true,
+		maxInProgressTasks: 3,
 		detectedCommands: [selectedAgentId],
 		agents: [
 			{

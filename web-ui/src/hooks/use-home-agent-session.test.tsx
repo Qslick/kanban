@@ -70,6 +70,7 @@ function createRuntimeConfig(overrides: Partial<RuntimeConfigResponse> = {}): Ru
 		globalConfigPath: "/tmp/global-config.json",
 		projectConfigPath: "/tmp/project-config.json",
 		readyForReviewNotificationsEnabled: true,
+		maxInProgressTasks: 3,
 		detectedCommands: ["codex", "claude", "cline"],
 		agents: [
 			{

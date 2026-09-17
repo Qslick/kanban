@@ -338,6 +338,9 @@ Parameters:
 - \`--task-id <task_id>\` required task ID.
 - \`--project-path <path>\` optional workspace path. If not already registered in Kanban, it is auto-added for git repos.
 
+Notes:
+- If In Progress already has the configured maximum number of tasks (default 3, \`maxInProgressTasks\`), this command fails without stopping running tasks. Finish or move a task first.
+
 # Per-Task Agent, Provider, Model, and Effort Overrides
 
 Tasks can override the workspace default agent, and additionally carry per-task provider, model, and reasoning-effort settings. Kanban stores these values on the card and passes them verbatim to whichever agent launches the task. Kanban never validates model IDs or effort vocabularies — that is each agent's job at launch.

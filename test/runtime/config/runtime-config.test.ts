@@ -328,6 +328,7 @@ describe.sequential("runtime-config auto agent selection", () => {
 					selectedShortcutLabel: null,
 					agentAutonomousModeEnabled: true,
 					readyForReviewNotificationsEnabled: true,
+					maxInProgressTasks: 3,
 					shortcuts: [],
 					commitPromptTemplate: current.commitPromptTemplateDefault,
 					openPrPromptTemplate: current.openPrPromptTemplateDefault,
@@ -339,12 +340,14 @@ describe.sequential("runtime-config auto agent selection", () => {
 					selectedAgentId?: string;
 					agentAutonomousModeEnabled?: boolean;
 					readyForReviewNotificationsEnabled?: boolean;
+					maxInProgressTasks?: number;
 					commitPromptTemplate?: string;
 					openPrPromptTemplate?: string;
 				};
 				expect(globalPayload.selectedAgentId).toBeUndefined();
 				expect(globalPayload.agentAutonomousModeEnabled).toBeUndefined();
 				expect(globalPayload.readyForReviewNotificationsEnabled).toBeUndefined();
+				expect(globalPayload.maxInProgressTasks).toBeUndefined();
 				expect(globalPayload.commitPromptTemplate).toBeUndefined();
 				expect(globalPayload.openPrPromptTemplate).toBeUndefined();
 				expect(existsSync(join(tempProject, ".cline", "kanban", "config.json"))).toBe(false);
@@ -376,6 +379,7 @@ describe.sequential("runtime-config auto agent selection", () => {
 					selectedShortcutLabel: null,
 					agentAutonomousModeEnabled: true,
 					readyForReviewNotificationsEnabled: true,
+					maxInProgressTasks: 3,
 					shortcuts: [{ label: "Ship", command: "npm run ship" }],
 					commitPromptTemplate: "commit",
 					openPrPromptTemplate: "pr",
@@ -412,6 +416,7 @@ describe.sequential("runtime-config auto agent selection", () => {
 					selectedShortcutLabel: null,
 					agentAutonomousModeEnabled: true,
 					readyForReviewNotificationsEnabled: true,
+					maxInProgressTasks: 3,
 					shortcuts: [],
 					commitPromptTemplate: current.commitPromptTemplateDefault,
 					openPrPromptTemplate: current.openPrPromptTemplateDefault,
@@ -439,6 +444,7 @@ describe.sequential("runtime-config auto agent selection", () => {
 					selectedShortcutLabel: null,
 					agentAutonomousModeEnabled: true,
 					readyForReviewNotificationsEnabled: true,
+					maxInProgressTasks: 3,
 					shortcuts: [{ label: "Ship", command: "npm run ship", icon: "rocket" }],
 					commitPromptTemplate: current.commitPromptTemplateDefault,
 					openPrPromptTemplate: current.openPrPromptTemplateDefault,
@@ -541,6 +547,50 @@ describe.sequential("runtime-config auto agent selection", () => {
 				const reloaded = await loadRuntimeConfig(tempProject);
 				expect(reloaded.selectedAgentId).toBe("codex");
 				expect(reloaded.agentAutonomousModeEnabled).toBe(false);
+			});
+		} finally {
+			cleanupProject();
+			cleanupHome();
+		}
+	});
+
+	it("defaults maxInProgressTasks to 3 and round-trips a custom cap", async () => {
+		const { path: tempHome, cleanup: cleanupHome } = createTempDir("kanban-home-runtime-config-max-in-progress-");
+		const { path: tempProject, cleanup: cleanupProject } = createTempDir(
+			"kanban-project-runtime-config-max-in-progress-",
+		);
+
+		try {
+			await withTemporaryEnv({ home: tempHome }, async () => {
+				const loaded = await loadRuntimeConfig(tempProject);
+				expect(loaded.maxInProgressTasks).toBe(3);
+
+				const updated = await updateRuntimeConfig(tempProject, {
+					maxInProgressTasks: 5,
+				});
+				expect(updated.maxInProgressTasks).toBe(5);
+
+				const globalPayload = JSON.parse(
+					readFileSync(join(tempHome, ".cline", "kanban", "config.json"), "utf8"),
+				) as {
+					maxInProgressTasks?: number;
+				};
+				expect(globalPayload.maxInProgressTasks).toBe(5);
+
+				const reloaded = await loadRuntimeConfig(tempProject);
+				expect(reloaded.maxInProgressTasks).toBe(5);
+
+				const clamped = await updateRuntimeConfig(tempProject, {
+					maxInProgressTasks: 0,
+				});
+				expect(clamped.maxInProgressTasks).toBe(1);
+				expect(
+					(
+						JSON.parse(readFileSync(join(tempHome, ".cline", "kanban", "config.json"), "utf8")) as {
+							maxInProgressTasks?: number;
+						}
+					).maxInProgressTasks,
+				).toBe(1);
 			});
 		} finally {
 			cleanupProject();

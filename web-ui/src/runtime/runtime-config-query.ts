@@ -46,6 +46,7 @@ export async function saveRuntimeConfig(
 		agentAutonomousModeEnabled?: boolean;
 		shortcuts?: RuntimeProjectShortcut[];
 		readyForReviewNotificationsEnabled?: boolean;
+		maxInProgressTasks?: number;
 		commitPromptTemplate?: string;
 		openPrPromptTemplate?: string;
 	},
