@@ -28,6 +28,7 @@ Install this checkout with `npm run link`. Roll back to the published binary wit
 | feat/agent-settings-launch | CLI `--agent-id` help includes grok; tests that card model/effort reach argv |
 | feat/ready-now-filter | Backlog "Ready now" toggle hides cards with unfinished AND blockers |
 | premium_saas_ui_redesign | Visual pass on board columns, cards, project rows, and top bar |
+| feat/web-ui-motion-polish | Default theme + motion tokens + component polish (reduced-motion) |
 | feat/verify-before-done | Optional `verifyCommand`; auto-review waits for `task verify` ok |
 | feat/concurrency-cap | `maxInProgressTasks` default 3; Play / start refuse at cap |
 

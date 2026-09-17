@@ -80,8 +80,7 @@ function FirstShortcutIconPicker({
 					side="bottom"
 					align="start"
 					sideOffset={4}
-					className="z-50 rounded-md border border-border bg-surface-2 p-1 shadow-lg"
-					style={{ animation: "kb-tooltip-show 100ms ease" }}
+					className="kb-popover-content z-50 rounded-md border border-border bg-surface-2 p-1 shadow-lg"
 				>
 					<div className="flex gap-0.5">
 						{RUNTIME_SHORTCUT_ICON_OPTIONS.map((option) => {
@@ -215,7 +214,7 @@ function TopBarGitStatusSection({
 					onToggleGitHistory={onToggleGitHistory}
 					isGitHistoryOpen={isGitHistoryOpen}
 				/>
-				<div className="flex items-center gap-0.5 rounded-md border border-border/70 bg-surface-2/60 p-0.5">
+				<div className="flex items-center gap-0.5 rounded-md border border-border bg-surface-2/70 p-0.5">
 					<Tooltip
 						side="bottom"
 						content="Fetch latest refs from upstream without changing your local branch or files."
@@ -417,7 +416,7 @@ export function TopBar({
 	return (
 		<>
 			<nav
-				className="kb-top-bar flex flex-nowrap items-center h-10 min-h-[40px] min-w-0 bg-surface-1/95 border-b border-border/80 backdrop-blur-xs"
+				className="kb-top-bar flex flex-nowrap items-center h-10 min-h-[40px] min-w-0 bg-surface-1 border-b border-border"
 				style={{
 					paddingLeft: onBack ? 6 : 12,
 					paddingRight: 8,
@@ -518,7 +517,7 @@ export function TopBar({
 								</div>
 							) : null}
 							{!hideProjectDependentActions && workspaceHint ? (
-								<span className="kb-navbar-tag inline-flex items-center rounded border border-border bg-surface-2 px-1.5 py-0.5 text-xs text-text-secondary">
+								<span className="kb-navbar-tag inline-flex items-center rounded-md border border-border bg-surface-2 px-1.5 py-0.5 text-[11px] font-medium text-text-secondary">
 									{workspaceHint}
 								</span>
 							) : null}
@@ -527,12 +526,12 @@ export function TopBar({
 									<button
 										type="button"
 										onClick={() => onOpenSettings()}
-										className="kb-navbar-tag inline-flex items-center rounded border border-status-orange/30 bg-status-orange/10 px-1.5 py-0.5 text-xs text-status-orange transition-colors hover:bg-status-orange/15 focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-0"
+										className="kb-navbar-tag inline-flex items-center rounded-md border border-status-orange/30 bg-status-orange/10 px-1.5 py-0.5 text-[11px] font-medium text-status-orange hover:bg-status-orange/15 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-border-focus"
 									>
 										{runtimeHint}
 									</button>
 								) : (
-									<span className="kb-navbar-tag inline-flex items-center rounded border border-status-orange/30 bg-status-orange/10 px-1.5 py-0.5 text-xs text-status-orange">
+									<span className="kb-navbar-tag inline-flex items-center rounded-md border border-status-orange/30 bg-status-orange/10 px-1.5 py-0.5 text-[11px] font-medium text-status-orange">
 										{runtimeHint}
 									</span>
 								)
@@ -561,7 +560,7 @@ export function TopBar({
 						<>
 							{!hideProjectDependentActions && onRunShortcut ? (
 								selectedShortcut ? (
-									<div className="flex items-center rounded-md border border-border/80 bg-surface-2/60 p-0.5 shadow-xs">
+									<div className="flex items-center rounded-md border border-border bg-surface-2/70 p-0.5 shadow-xs">
 										<Button
 											variant="ghost"
 											size="sm"
@@ -588,8 +587,7 @@ export function TopBar({
 											</RadixPopover.Trigger>
 											<RadixPopover.Portal>
 												<RadixPopover.Content
-													className="z-50 rounded-lg border border-border bg-surface-2 p-1 shadow-xl"
-													style={{ animation: "kb-tooltip-show 100ms ease" }}
+													className="kb-popover-content z-50 rounded-lg border border-border bg-surface-2 p-1 shadow-xl"
 													sideOffset={5}
 													align="end"
 												>
@@ -665,7 +663,7 @@ export function TopBar({
 										disabled={Boolean(isTerminalLoading)}
 										aria-label={isTerminalOpen ? "Close terminal" : "Open terminal"}
 										className={cn(
-											"ml-1.5 h-7.5 w-7.5 p-0 transition-colors",
+											"ml-1.5 h-7.5 w-7.5 p-0",
 											isTerminalOpen
 												? "bg-surface-3 text-accent border border-accent/40 shadow-xs"
 												: "text-text-secondary hover:text-text-primary",
@@ -755,14 +753,14 @@ export function TopBar({
 							onChange={(event) => setNewShortcutLabel(event.target.value)}
 							placeholder="Label"
 							disabled={isCreateShortcutSaving}
-							className="h-8 w-full rounded-md border border-border bg-surface-2 px-2 text-xs text-text-primary placeholder:text-text-tertiary focus:border-border-focus focus:outline-none disabled:opacity-60"
+							className="h-8 w-full rounded-md border border-border bg-surface-2 px-2 text-xs text-text-primary placeholder:text-text-tertiary focus:border-border-focus focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-border-focus disabled:opacity-60"
 						/>
 						<input
 							value={newShortcutCommand}
 							onChange={(event) => setNewShortcutCommand(event.target.value)}
 							placeholder="npm run dev"
 							disabled={isCreateShortcutSaving}
-							className="h-8 w-full rounded-md border border-border bg-surface-2 px-2 text-xs text-text-primary placeholder:text-text-tertiary focus:border-border-focus focus:outline-none disabled:opacity-60"
+							className="h-8 w-full rounded-md border border-border bg-surface-2 px-2 text-xs text-text-primary placeholder:text-text-tertiary focus:border-border-focus focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-border-focus disabled:opacity-60"
 						/>
 					</div>
 					{createShortcutError ? (

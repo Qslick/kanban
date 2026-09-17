@@ -4,12 +4,12 @@ import { getTerminalThemeColors, type ThemeTerminalColors, useTheme } from "@/ho
 
 /** Static default terminal colors — preserved for backward compatibility and tests. */
 export const TERMINAL_THEME_COLORS = {
-	textPrimary: "#E6EDF3",
-	surfacePrimary: "#1F2428",
-	surfaceRaised: "#24292E",
-	selectionBackground: "#0084FF4D",
+	textPrimary: "#E8EEF4",
+	surfacePrimary: "#151A1E",
+	surfaceRaised: "#1C2126",
+	selectionBackground: "#1F87B54D",
 	selectionForeground: "#ffffff",
-	selectionInactiveBackground: "#2D333966",
+	selectionInactiveBackground: "#252B3166",
 } as const;
 
 /** React hook that returns terminal colors matching the active theme. */

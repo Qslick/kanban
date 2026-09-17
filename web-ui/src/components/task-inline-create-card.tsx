@@ -198,7 +198,7 @@ export function TaskInlineCreateCard({
 	return (
 		<div
 			ref={setCardRef}
-			className="rounded-md border border-border-bright bg-surface-2 p-3"
+			className="rounded-lg border border-border bg-surface-2 p-3 shadow-xs"
 			style={{ flexShrink: 0, marginBottom: cardMarginBottom, fontSize: 12 }}
 		>
 			<div>
@@ -212,7 +212,7 @@ export function TaskInlineCreateCard({
 							value={title ?? ""}
 							onChange={(event) => onTitleChange(event.currentTarget.value)}
 							placeholder={deriveTaskTitleFromPrompt(prompt) || "Auto-generated from prompt"}
-							className="h-8 w-full rounded-md border border-border-bright bg-surface-2 px-2 text-[12px] text-text-primary placeholder:text-text-tertiary focus:border-border-focus focus:outline-none"
+							className="h-8 w-full rounded-md border border-border bg-surface-2 px-2 text-[12px] text-text-primary placeholder:text-text-tertiary focus:border-border-focus focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-border-focus"
 						/>
 					</div>
 				) : null}
@@ -253,7 +253,7 @@ export function TaskInlineCreateCard({
 						className="flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded-sm border border-border-bright bg-surface-3 data-[state=checked]:bg-accent data-[state=checked]:border-accent disabled:cursor-default disabled:opacity-40"
 					>
 						<RadixCheckbox.Indicator>
-							<Check size={10} className="text-white" />
+							<Check size={10} className="text-accent-fg" />
 						</RadixCheckbox.Indicator>
 					</RadixCheckbox.Root>
 					<span>Start in plan mode</span>
@@ -286,7 +286,7 @@ export function TaskInlineCreateCard({
 							className="flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded-sm border border-border-bright bg-surface-3 data-[state=checked]:bg-accent data-[state=checked]:border-accent"
 						>
 							<RadixCheckbox.Indicator>
-								<Check size={10} className="text-white" />
+								<Check size={10} className="text-accent-fg" />
 							</RadixCheckbox.Indicator>
 						</RadixCheckbox.Root>
 						<span>Automatically</span>
