@@ -49,6 +49,10 @@ vi.mock("@/components/detail-panels/column-context-panel", () => ({
 	ColumnContextPanel: () => <div data-testid="column-context-panel" />,
 }));
 
+vi.mock("@/components/stranded-worktree-banner", () => ({
+	StrandedWorktreeBanner: () => null,
+}));
+
 vi.mock("@/components/detail-panels/diff-viewer-panel", () => ({
 	DiffViewerPanel: (props: unknown) => {
 		mockDiffViewerPanel(props);

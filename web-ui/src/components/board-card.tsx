@@ -21,6 +21,7 @@ import type { BoardCard as BoardCardModel, BoardColumnId } from "@/types";
 import { getTaskAutoReviewCancelButtonLabel } from "@/types";
 import { formatPathForDisplay } from "@/utils/path-display";
 import { useMeasure } from "@/utils/react-use";
+import { isStrandedTaskWorktreeSession } from "@/utils/stranded-task-session";
 import {
 	clampTextWithInlineSuffix,
 	getTaskPromptDescription,
@@ -428,6 +429,12 @@ export function BoardCard({
 				}
 		: null;
 	const showReviewGitActions = columnId === "review" && (reviewWorkspaceSnapshot?.changedFiles ?? 0) > 0;
+	const showStrandedWorktree =
+		showWorkspaceStatus &&
+		isStrandedTaskWorktreeSession({
+			worktreeExists: Boolean(reviewWorkspaceSnapshot?.headCommit),
+			sessionState: sessionSummary?.state,
+		});
 	const isAnyGitActionLoading = isCommitLoading || isOpenPrLoading;
 	const cancelAutomaticActionLabel =
 		!isTrashCard && card.autoReviewEnabled ? getTaskAutoReviewCancelButtonLabel(card.autoReviewMode) : null;
@@ -748,6 +755,14 @@ export function BoardCard({
 										</p>
 									</div>
 								</div>
+							) : null}
+							{showStrandedWorktree ? (
+								<p className="m-0 mt-1 text-xs text-status-orange" data-testid="stranded-worktree-badge">
+									Stranded worktree
+									{reviewWorkspaceSnapshot?.headCommit
+										? ` · ${reviewWorkspaceSnapshot.headCommit.slice(0, 8)}`
+										: ""}
+								</p>
 							) : null}
 							{showWorkspaceStatus && reviewWorkspacePath ? (
 								<p

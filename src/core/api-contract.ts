@@ -595,6 +595,39 @@ export const runtimeWorktreeDeleteResponseSchema = z.object({
 });
 export type RuntimeWorktreeDeleteResponse = z.infer<typeof runtimeWorktreeDeleteResponseSchema>;
 
+export const runtimeTaskWorktreeStatusResponseSchema = z.object({
+	taskId: z.string(),
+	path: z.string(),
+	exists: z.boolean(),
+	stranded: z.boolean(),
+	sessionState: runtimeTaskSessionStateSchema.nullable(),
+	headCommit: z.string().nullable(),
+	headShortSha: z.string().nullable(),
+	reachable: z.boolean(),
+	recoveredBranch: z.string(),
+	recoveredBranchExists: z.boolean(),
+	canDiscard: z.boolean(),
+	error: z.string().optional(),
+});
+export type RuntimeTaskWorktreeStatusResponse = z.infer<typeof runtimeTaskWorktreeStatusResponseSchema>;
+
+export const runtimeTaskWorktreeKeepResponseSchema = z.object({
+	ok: z.boolean(),
+	branch: z.string(),
+	headCommit: z.string().nullable(),
+	created: z.boolean(),
+	error: z.string().optional(),
+});
+export type RuntimeTaskWorktreeKeepResponse = z.infer<typeof runtimeTaskWorktreeKeepResponseSchema>;
+
+export const runtimeTaskWorktreeDiscardResponseSchema = z.object({
+	ok: z.boolean(),
+	removed: z.boolean(),
+	refused: z.boolean(),
+	error: z.string().optional(),
+});
+export type RuntimeTaskWorktreeDiscardResponse = z.infer<typeof runtimeTaskWorktreeDiscardResponseSchema>;
+
 export const runtimeTaskWorkspaceInfoRequestSchema = z.object({
 	taskId: z.string(),
 	baseRef: z.string(),

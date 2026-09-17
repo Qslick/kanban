@@ -8,6 +8,7 @@ import type {
 	RuntimeBoardData,
 	RuntimeBoardDependency,
 	RuntimeTaskAgentSettings,
+	RuntimeTaskWorktreeStatusResponse,
 	RuntimeWorkspaceStateResponse,
 } from "../core/api-contract";
 import { runtimeAgentIdSchema } from "../core/api-contract";
@@ -920,6 +921,74 @@ async function startTask(input: { cwd: string; taskId: string; projectPath?: str
 	};
 }
 
+function formatTaskWorktreeRecord(status: RuntimeTaskWorktreeStatusResponse): JsonRecord {
+	return {
+		taskId: status.taskId,
+		path: status.path,
+		exists: status.exists,
+		stranded: status.stranded,
+		sessionState: status.sessionState,
+		head: status.headCommit,
+		headShortSha: status.headShortSha,
+		reachable: status.reachable,
+		recoveredBranch: status.recoveredBranch,
+		recoveredBranchExists: status.recoveredBranchExists,
+		canDiscard: status.canDiscard,
+		...(status.error ? { error: status.error } : {}),
+	};
+}
+
+async function inspectTaskWorktree(input: {
+	cwd: string;
+	taskId: string;
+	projectPath?: string;
+	action?: "keep" | "discard";
+}): Promise<JsonRecord> {
+	const workspaceRepoPath = await resolveWorkspaceRepoPath(input.projectPath, input.cwd);
+	const workspaceId = await ensureRuntimeWorkspace(workspaceRepoPath);
+	const runtimeClient = createRuntimeTrpcClient(workspaceId);
+	const runtimeState = await runtimeClient.workspace.getState.query();
+	const record = findTaskRecord(runtimeState, input.taskId);
+	if (!record) {
+		throw new Error(`Task "${input.taskId}" was not found in workspace ${workspaceRepoPath}.`);
+	}
+
+	const request = {
+		taskId: record.task.id,
+		baseRef: record.task.baseRef,
+	};
+	if (input.action === "keep") {
+		const kept = await runtimeClient.workspace.keepTaskWorktree.mutate(request);
+		return {
+			ok: kept.ok,
+			action: "keep",
+			workspacePath: workspaceRepoPath,
+			branch: kept.branch,
+			head: kept.headCommit,
+			created: kept.created,
+			...(kept.error ? { error: kept.error } : {}),
+		};
+	}
+	if (input.action === "discard") {
+		const discarded = await runtimeClient.workspace.discardTaskWorktree.mutate(request);
+		return {
+			ok: discarded.ok,
+			action: "discard",
+			workspacePath: workspaceRepoPath,
+			removed: discarded.removed,
+			refused: discarded.refused,
+			...(discarded.error ? { error: discarded.error } : {}),
+		};
+	}
+
+	const status = await runtimeClient.workspace.getTaskWorktree.query(request);
+	return {
+		ok: true,
+		workspacePath: workspaceRepoPath,
+		...formatTaskWorktreeRecord(status),
+	};
+}
+
 interface TrashTaskExecutionResult {
 	task: JsonRecord;
 	taskId: string;
@@ -1581,5 +1650,26 @@ export function registerTaskCommand(program: Command): void {
 						projectPath: options.projectPath,
 					}),
 			);
+		});
+
+	task
+		.command("worktree")
+		.description("Inspect or recover a stranded task worktree.")
+		.requiredOption("--task-id <id>", "Task ID.")
+		.option("--keep", "Create or update recovered/<task-id> at HEAD without deleting the worktree.")
+		.option("--discard", "Delete the worktree only if HEAD is reachable from a branch or tag.")
+		.option("--project-path <path>", "Workspace path. Defaults to current directory workspace.")
+		.action(async (options: { taskId: string; keep?: boolean; discard?: boolean; projectPath?: string }) => {
+			await runTaskCommand(async () => {
+				if (options.keep && options.discard) {
+					throw new Error("task worktree accepts at most one of --keep or --discard.");
+				}
+				return await inspectTaskWorktree({
+					cwd: process.cwd(),
+					taskId: options.taskId,
+					projectPath: options.projectPath,
+					action: options.keep ? "keep" : options.discard ? "discard" : undefined,
+				});
+			});
 		});
 }

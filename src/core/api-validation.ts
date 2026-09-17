@@ -174,6 +174,22 @@ export function parseWorktreeDeleteRequest(value: unknown): RuntimeWorktreeDelet
 	};
 }
 
+export function parseTaskWorktreeRequest(value: unknown): RuntimeTaskWorkspaceInfoRequest {
+	const parsed = parseWithSchema(runtimeTaskWorkspaceInfoRequestSchema, value);
+	const taskId = parsed.taskId.trim();
+	if (!taskId) {
+		throw new Error("Invalid task worktree payload.");
+	}
+	const baseRef = parsed.baseRef.trim();
+	if (!baseRef) {
+		throw new Error("Invalid task worktree payload.");
+	}
+	return {
+		taskId,
+		baseRef,
+	};
+}
+
 export function parseWorkspaceStateSaveRequest(value: unknown): RuntimeWorkspaceStateSaveRequest {
 	return parseWithSchema(runtimeWorkspaceStateSaveRequestSchema, value);
 }
