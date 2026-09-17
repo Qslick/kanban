@@ -85,6 +85,7 @@ function createRuntimeConfig(selectedAgentId: RuntimeConfigResponse["selectedAge
 		globalConfigPath: "/tmp/global-config.json",
 		projectConfigPath: "/tmp/project-config.json",
 		readyForReviewNotificationsEnabled: true,
+		maxInProgressTasks: 3,
 		detectedCommands: [],
 		agents: [
 			{

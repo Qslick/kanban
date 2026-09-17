@@ -63,6 +63,7 @@ const NOOP_SEND_TASK_INPUT = async (): Promise<{ ok: boolean }> => ({ ok: true }
 interface HookSnapshot {
 	handleRestoreTaskFromTrash: (taskId: string) => void;
 	handleStartTask: (taskId: string) => void;
+	handleStartAllBacklogTasks: (taskIds?: string[]) => void;
 	handleCardSelect: (taskId: string) => void;
 	handleConfirmClearTrash: () => void;
 }
@@ -90,6 +91,7 @@ function HookHarness({
 	cleanupTaskWorkspace = NOOP_CLEANUP_WORKSPACE,
 	selectedCard = null,
 	setSelectedTaskIdOverride,
+	maxInProgressTasks,
 	onSnapshot,
 }: {
 	board: BoardData;
@@ -100,6 +102,7 @@ function HookHarness({
 	cleanupTaskWorkspace?: (taskId: string) => Promise<unknown>;
 	selectedCard?: { card: BoardCard; column: { id: "backlog" | "in_progress" | "review" | "trash" } } | null;
 	setSelectedTaskIdOverride?: Dispatch<SetStateAction<string | null>>;
+	maxInProgressTasks?: number;
 	onSnapshot?: (snapshot: HookSnapshot) => void;
 }): null {
 	const [sessions, setSessions] = useState<Record<string, RuntimeTaskSessionSummary>>({});
@@ -125,12 +128,14 @@ function HookHarness({
 		fetchTaskWorkspaceInfo: NOOP_FETCH_WORKSPACE_INFO,
 		sendTaskSessionInput: NOOP_SEND_TASK_INPUT,
 		readyForReviewNotificationsEnabled: false,
+		maxInProgressTasks,
 	});
 
 	useEffect(() => {
 		onSnapshot?.({
 			handleRestoreTaskFromTrash: actions.handleRestoreTaskFromTrash,
 			handleStartTask: actions.handleStartTask,
+			handleStartAllBacklogTasks: actions.handleStartAllBacklogTasks,
 			handleCardSelect: actions.handleCardSelect,
 			handleConfirmClearTrash: actions.handleConfirmClearTrash,
 		});
@@ -138,6 +143,7 @@ function HookHarness({
 		actions.handleCardSelect,
 		actions.handleConfirmClearTrash,
 		actions.handleRestoreTaskFromTrash,
+		actions.handleStartAllBacklogTasks,
 		actions.handleStartTask,
 		onSnapshot,
 	]);
@@ -765,5 +771,159 @@ describe("useBoardInteractions", () => {
 			expect(stopTaskSession).toHaveBeenCalledWith(task.id);
 			expect(cleanupTaskWorkspace).toHaveBeenCalledWith(task.id);
 		}
+	});
+
+	it("refuses Play when In Progress is already at the cap", async () => {
+		let latestSnapshot: HookSnapshot | null = null;
+
+		useProgrammaticCardMovesMock.mockReturnValue({
+			handleProgrammaticCardMoveReady: () => {},
+			setRequestMoveTaskToTrashHandler: () => {},
+			tryProgrammaticCardMove: () => "unavailable",
+			consumeProgrammaticCardMove: () => ({}),
+			resolvePendingProgrammaticTrashMove: () => {},
+			waitForProgrammaticCardMoveAvailability: async () => {},
+			resetProgrammaticCardMoves: () => {},
+			requestMoveTaskToTrashWithAnimation: async () => {},
+			programmaticCardMoveCycle: 0,
+		});
+		useLinkedBacklogTaskActionsMock.mockReturnValue({
+			handleCreateDependency: () => {},
+			handleDeleteDependency: () => {},
+			confirmMoveTaskToTrash: async () => {},
+			requestMoveTaskToTrash: async () => {},
+		});
+
+		const board: BoardData = {
+			columns: [
+				{ id: "backlog", title: "Backlog", cards: [createTask("ready-1", "Ready", 1)] },
+				{
+					id: "in_progress",
+					title: "In Progress",
+					cards: [
+						createTask("active-1", "Active 1", 2),
+						createTask("active-2", "Active 2", 3),
+						createTask("active-3", "Active 3", 4),
+					],
+				},
+				{ id: "review", title: "Review", cards: [] },
+				{ id: "trash", title: "Done", cards: [] },
+			],
+			dependencies: [],
+		};
+		const setBoard = vi.fn<Dispatch<SetStateAction<BoardData>>>(() => {});
+		const startTaskSession = vi.fn(async () => ({ ok: true as const }));
+
+		await act(async () => {
+			root.render(
+				<HookHarness
+					board={board}
+					setBoard={setBoard}
+					ensureTaskWorkspace={async () => ({ ok: true as const })}
+					startTaskSession={startTaskSession}
+					maxInProgressTasks={3}
+					onSnapshot={(snapshot) => {
+						latestSnapshot = snapshot;
+					}}
+				/>,
+			);
+		});
+
+		if (!latestSnapshot) {
+			throw new Error("Expected a hook snapshot.");
+		}
+
+		await act(async () => {
+			latestSnapshot!.handleStartTask("ready-1");
+		});
+
+		expect(startTaskSession).not.toHaveBeenCalled();
+		expect(notifyErrorMock).toHaveBeenCalledWith(
+			"Cannot start another task. In Progress already has the maximum of 3 tasks. Finish or move a running task first.",
+		);
+	});
+
+	it("starts only remaining capacity on Start all", async () => {
+		let latestSnapshot: HookSnapshot | null = null;
+
+		useProgrammaticCardMovesMock.mockReturnValue({
+			handleProgrammaticCardMoveReady: () => {},
+			setRequestMoveTaskToTrashHandler: () => {},
+			tryProgrammaticCardMove: () => "unavailable",
+			consumeProgrammaticCardMove: () => ({}),
+			resolvePendingProgrammaticTrashMove: () => {},
+			waitForProgrammaticCardMoveAvailability: async () => {},
+			resetProgrammaticCardMoves: () => {},
+			requestMoveTaskToTrashWithAnimation: async () => {},
+			programmaticCardMoveCycle: 0,
+		});
+		useLinkedBacklogTaskActionsMock.mockReturnValue({
+			handleCreateDependency: () => {},
+			handleDeleteDependency: () => {},
+			confirmMoveTaskToTrash: async () => {},
+			requestMoveTaskToTrash: async () => {},
+		});
+
+		const board: BoardData = {
+			columns: [
+				{
+					id: "backlog",
+					title: "Backlog",
+					cards: [
+						createTask("blocked", "Blocked", 1),
+						createTask("ready-1", "Ready 1", 2),
+						createTask("ready-2", "Ready 2", 3),
+					],
+				},
+				{
+					id: "in_progress",
+					title: "In Progress",
+					cards: [createTask("active-1", "Active 1", 4), createTask("active-2", "Active 2", 5)],
+				},
+				{ id: "review", title: "Review", cards: [createTask("blocker", "Blocker", 6)] },
+				{ id: "trash", title: "Done", cards: [] },
+			],
+			dependencies: [{ id: "dep-1", fromTaskId: "blocked", toTaskId: "blocker", createdAt: 1 }],
+		};
+		const setBoard = vi.fn<Dispatch<SetStateAction<BoardData>>>(() => {});
+		const startTaskSession = vi.fn(async () => ({ ok: true as const }));
+
+		await act(async () => {
+			root.render(
+				<HookHarness
+					board={board}
+					setBoard={setBoard}
+					ensureTaskWorkspace={async () => ({
+						ok: true as const,
+						response: {
+							ok: true as const,
+							path: "/tmp/task",
+							baseRef: "main",
+							baseCommit: "abc123",
+						},
+					})}
+					startTaskSession={startTaskSession}
+					maxInProgressTasks={3}
+					onSnapshot={(snapshot) => {
+						latestSnapshot = snapshot;
+					}}
+				/>,
+			);
+		});
+
+		if (!latestSnapshot) {
+			throw new Error("Expected a hook snapshot.");
+		}
+
+		await act(async () => {
+			latestSnapshot!.handleStartAllBacklogTasks();
+			for (let i = 0; i < 10; i++) {
+				await Promise.resolve();
+			}
+		});
+
+		expect(startTaskSession).toHaveBeenCalledTimes(1);
+		expect(startTaskSession).toHaveBeenCalledWith(expect.objectContaining({ id: "ready-1" }));
+		expect(notifyErrorMock).not.toHaveBeenCalled();
 	});
 });

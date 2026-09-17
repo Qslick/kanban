@@ -64,4 +64,13 @@ describe("getStartableBacklogTaskIds", () => {
 		});
 		expect(getStartableBacklogTaskIds(board)).toEqual([]);
 	});
+
+	it("fills remaining in-progress slots and skips blocked AND dependents", () => {
+		const board = createBoard({
+			backlogCards: [createCard("blocked"), createCard("ready-1"), createCard("ready-2"), createCard("ready-3")],
+			inProgressCards: [createCard("active-1"), createCard("active-2")],
+			dependencies: [{ id: "dep-1", fromTaskId: "blocked", toTaskId: "active-1", createdAt: 1 }],
+		});
+		expect(getStartableBacklogTaskIds(board, 3)).toEqual(["ready-1"]);
+	});
 });

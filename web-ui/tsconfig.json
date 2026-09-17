@@ -19,6 +19,7 @@
       "@runtime-home-agent-session": ["../src/core/home-agent-session.ts"],
       "@runtime-trpc": ["../src/trpc/app-router.ts"],
       "@runtime-shortcuts": ["../src/config/shortcut-utils.ts"],
+      "@runtime-in-progress-cap": ["../src/core/in-progress-cap.ts"],
       "@runtime-task-id": ["../src/core/task-id.ts"],
       "@runtime-task-title": ["../src/core/task-title.ts"],
       "@runtime-task-worktree-path": ["../src/workspace/task-worktree-path.ts"],

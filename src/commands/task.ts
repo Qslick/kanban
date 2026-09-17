@@ -1,5 +1,6 @@
 import { createTRPCProxyClient, httpBatchLink } from "@trpc/client";
 import type { Command } from "commander";
+import { loadRuntimeConfig } from "../config/runtime-config";
 import { getRuntimeAgentCatalogEntry } from "../core/agent-catalog";
 import type {
 	RuntimeAgentId,
@@ -11,6 +12,7 @@ import type {
 	RuntimeWorkspaceStateResponse,
 } from "../core/api-contract";
 import { runtimeAgentIdSchema } from "../core/api-contract";
+import { getInProgressStartRefusal } from "../core/in-progress-cap";
 import { runVerifyCommandInWorktree } from "../core/run-verify-command";
 import { buildKanbanRuntimeUrl, getKanbanRuntimeOrigin, getRuntimeFetch } from "../core/runtime-endpoint";
 import { cloneRuntimeTaskAgentSettings } from "../core/task-agent-settings";
@@ -909,7 +911,12 @@ async function unlinkTasks(input: { cwd: string; dependencyId: string; projectPa
 	};
 }
 
-async function startTask(input: { cwd: string; taskId: string; projectPath?: string }): Promise<JsonRecord> {
+async function startTask(input: {
+	cwd: string;
+	taskId: string;
+	projectPath?: string;
+	skipConcurrencyCap?: boolean;
+}): Promise<JsonRecord> {
 	const workspaceRepoPath = await resolveWorkspaceRepoPath(input.projectPath, input.cwd);
 	const workspaceId = await ensureRuntimeWorkspace(workspaceRepoPath);
 	const runtimeClient = createRuntimeTrpcClient(workspaceId);
@@ -923,6 +930,14 @@ async function startTask(input: { cwd: string; taskId: string; projectPath?: str
 		throw new Error(
 			`Task "${input.taskId}" is in "${fromColumnId}" and can only be started from backlog or in_progress.`,
 		);
+	}
+
+	if (!input.skipConcurrencyCap) {
+		const runtimeConfig = await loadRuntimeConfig(workspaceRepoPath);
+		const refusal = getInProgressStartRefusal(runtimeState.board, runtimeConfig.maxInProgressTasks, input.taskId);
+		if (refusal) {
+			throw new Error(refusal);
+		}
 	}
 
 	const currentRecord = findTaskRecord(runtimeState, input.taskId);
@@ -1091,6 +1106,7 @@ async function trashTaskById(input: {
 			cwd: input.cwd,
 			taskId: readyTaskId,
 			projectPath: input.projectPath,
+			skipConcurrencyCap: true,
 		});
 		autoStartedTasks.push(started);
 	}

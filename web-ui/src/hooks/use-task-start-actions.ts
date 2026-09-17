@@ -1,3 +1,4 @@
+import { DEFAULT_MAX_IN_PROGRESS_TASKS, selectStartAllBacklogTaskIds } from "@runtime-in-progress-cap";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -21,32 +22,11 @@ export interface UseTaskStartActionsResult {
 	handleStartAllBacklogTasksFromBoard: () => void;
 }
 
-export function getStartableBacklogTaskIds(board: BoardData): string[] {
-	const allBacklogTasks = new Set<string>();
-	const allInProgressTasks = new Set<string>();
-	const startableTaskIds: string[] = [];
-
-	const backlogCards = board.columns.find((column) => column.id === "backlog")?.cards;
-	const inProgressTasks = board.columns.find((column) => column.id === "in_progress")?.cards;
-
-	backlogCards?.forEach((card) => {
-		allBacklogTasks.add(card.id);
-	});
-	inProgressTasks?.forEach((card) => {
-		allInProgressTasks.add(card.id);
-	});
-
-	backlogCards?.forEach((card) => {
-		const dependency = board.dependencies.find((d) => d.fromTaskId === card.id);
-		const isChildTaskInBacklog = dependency && allBacklogTasks.has(dependency.toTaskId);
-		const isChildTaskInProgress = dependency && allInProgressTasks.has(dependency.toTaskId);
-
-		if (!isChildTaskInBacklog && !isChildTaskInProgress) {
-			startableTaskIds.push(card.id);
-		}
-	});
-
-	return startableTaskIds;
+export function getStartableBacklogTaskIds(
+	board: BoardData,
+	maxInProgressTasks: number = DEFAULT_MAX_IN_PROGRESS_TASKS,
+): string[] {
+	return selectStartAllBacklogTaskIds(board, maxInProgressTasks);
 }
 
 export function useTaskStartActions({
@@ -96,13 +76,8 @@ export function useTaskStartActions({
 	);
 
 	const handleStartAllBacklogTasksFromBoard = useCallback(() => {
-		const backlogTaskIds = getStartableBacklogTaskIds(board);
-
-		if (backlogTaskIds.length === 0) {
-			return;
-		}
-		startBacklogTasks(backlogTaskIds);
-	}, [board, startBacklogTasks]);
+		handleStartAllBacklogTasks();
+	}, [handleStartAllBacklogTasks]);
 
 	const handleCreateAndStartTask = useCallback(
 		(options?: { keepDialogOpen?: boolean }): string | null => {

@@ -1,4 +1,11 @@
 import type { DropResult } from "@hello-pangea/dnd";
+import {
+	DEFAULT_MAX_IN_PROGRESS_TASKS,
+	formatInProgressCapError,
+	getInProgressStartRefusal,
+	getRemainingInProgressCapacity,
+	selectStartAllBacklogTaskIds,
+} from "@runtime-in-progress-cap";
 import pLimit from "p-limit";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -68,6 +75,7 @@ interface UseBoardInteractionsInput {
 		options?: SendTerminalInputOptions,
 	) => Promise<{ ok: boolean; message?: string }>;
 	readyForReviewNotificationsEnabled: boolean;
+	maxInProgressTasks?: number;
 }
 
 export interface UseBoardInteractionsResult {
@@ -110,6 +118,7 @@ export function useBoardInteractions({
 	fetchTaskWorkspaceInfo,
 	sendTaskSessionInput,
 	readyForReviewNotificationsEnabled,
+	maxInProgressTasks = DEFAULT_MAX_IN_PROGRESS_TASKS,
 }: UseBoardInteractionsInput): UseBoardInteractionsResult {
 	const previousSessionsRef = useRef<Record<string, RuntimeTaskSessionSummary>>({});
 	const notificationPermissionPromptInFlightRef = useRef(false);
@@ -663,10 +672,15 @@ export function useBoardInteractions({
 			if (!selection || selection.column.id !== "backlog") {
 				return;
 			}
+			const refusal = getInProgressStartRefusal(board, maxInProgressTasks, taskId);
+			if (refusal) {
+				notifyError(refusal);
+				return;
+			}
 			maybeRequestNotificationPermissionForTaskStart();
 			void startBacklogTaskWithAnimation(selection.card);
 		},
-		[board, maybeRequestNotificationPermissionForTaskStart, startBacklogTaskWithAnimation],
+		[board, maxInProgressTasks, maybeRequestNotificationPermissionForTaskStart, startBacklogTaskWithAnimation],
 	);
 
 	const handleStartAllBacklogTasks = useCallback(
@@ -677,11 +691,19 @@ export function useBoardInteractions({
 				return;
 			}
 
+			const startableTaskIds = selectStartAllBacklogTaskIds(board, maxInProgressTasks, requestedTaskIds);
+			if (startableTaskIds.length === 0) {
+				if (getRemainingInProgressCapacity(board, maxInProgressTasks) <= 0) {
+					notifyError(formatInProgressCapError(maxInProgressTasks));
+				}
+				return;
+			}
+
 			let nextBoard = board;
 			const pendingStarts: BoardCard[] = [];
 			const startedTaskIds = new Set<string>();
 
-			for (const taskId of requestedTaskIds) {
+			for (const taskId of startableTaskIds) {
 				if (!taskId || startedTaskIds.has(taskId)) {
 					continue;
 				}
@@ -712,7 +734,7 @@ export function useBoardInteractions({
 				void kickoffTaskInProgress(task, task.id, "backlog");
 			}
 		},
-		[board, kickoffTaskInProgress, maybeRequestNotificationPermissionForTaskStart, setBoard],
+		[board, kickoffTaskInProgress, maxInProgressTasks, maybeRequestNotificationPermissionForTaskStart, setBoard],
 	);
 
 	const handleDetailTaskDragEnd = useCallback(

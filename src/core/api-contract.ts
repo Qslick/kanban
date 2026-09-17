@@ -977,6 +977,7 @@ export const runtimeConfigResponseSchema = z.object({
 	globalConfigPath: z.string(),
 	projectConfigPath: z.string().nullable(),
 	readyForReviewNotificationsEnabled: z.boolean(),
+	maxInProgressTasks: z.number().int().min(1),
 	detectedCommands: z.array(z.string()),
 	agents: z.array(runtimeAgentDefinitionSchema),
 	shortcuts: z.array(runtimeProjectShortcutSchema),
@@ -994,6 +995,7 @@ export const runtimeConfigSaveRequestSchema = z.object({
 	agentAutonomousModeEnabled: z.boolean().optional(),
 	shortcuts: z.array(runtimeProjectShortcutSchema).optional(),
 	readyForReviewNotificationsEnabled: z.boolean().optional(),
+	maxInProgressTasks: z.number().int().min(1).optional(),
 	commitPromptTemplate: z.string().optional(),
 	openPrPromptTemplate: z.string().optional(),
 });
