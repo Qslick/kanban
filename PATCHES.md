@@ -36,6 +36,7 @@ Install this checkout with `npm run link`. Roll back to the published binary wit
 | feat/panel-review-runtime | Fail-closed panel gate before auto-review commit/PR |
 | feat/session-hygiene | teardown, process-tree kill, worktree cleanup under load |
 | feat/panel-review-live-dispatch | real grok/codex/agy/claude seats, read-only, non-blocking |
+| feat/fix-stale-persist-on-conflict | UI conflict recovery must not persist a stale board over CLI cards |
 
 ## Skipped
 
