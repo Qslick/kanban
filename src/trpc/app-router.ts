@@ -83,6 +83,9 @@ import type {
 	RuntimeTaskSessionStopResponse,
 	RuntimeTaskWorkspaceInfoRequest,
 	RuntimeTaskWorkspaceInfoResponse,
+	RuntimeTaskWorktreeDiscardResponse,
+	RuntimeTaskWorktreeKeepResponse,
+	RuntimeTaskWorktreeStatusResponse,
 	RuntimeUpdateStatusResponse,
 	RuntimeWorkspaceChangesRequest,
 	RuntimeWorkspaceChangesResponse,
@@ -174,6 +177,9 @@ import {
 	runtimeTaskSessionStopResponseSchema,
 	runtimeTaskWorkspaceInfoRequestSchema,
 	runtimeTaskWorkspaceInfoResponseSchema,
+	runtimeTaskWorktreeDiscardResponseSchema,
+	runtimeTaskWorktreeKeepResponseSchema,
+	runtimeTaskWorktreeStatusResponseSchema,
 	runtimeUpdateStatusResponseSchema,
 	runtimeWorkspaceChangesRequestSchema,
 	runtimeWorkspaceChangesResponseSchema,
@@ -330,6 +336,18 @@ export interface RuntimeTrpcContext {
 			scope: RuntimeTrpcWorkspaceScope,
 			input: RuntimeTaskWorkspaceInfoRequest,
 		) => Promise<RuntimeTaskWorkspaceInfoResponse>;
+		loadTaskWorktree: (
+			scope: RuntimeTrpcWorkspaceScope,
+			input: RuntimeTaskWorkspaceInfoRequest,
+		) => Promise<RuntimeTaskWorktreeStatusResponse>;
+		keepTaskWorktree: (
+			scope: RuntimeTrpcWorkspaceScope,
+			input: RuntimeTaskWorkspaceInfoRequest,
+		) => Promise<RuntimeTaskWorktreeKeepResponse>;
+		discardTaskWorktree: (
+			scope: RuntimeTrpcWorkspaceScope,
+			input: RuntimeTaskWorkspaceInfoRequest,
+		) => Promise<RuntimeTaskWorktreeDiscardResponse>;
 		searchFiles: (
 			scope: RuntimeTrpcWorkspaceScope,
 			input: RuntimeWorkspaceFileSearchRequest,
@@ -647,6 +665,24 @@ export const runtimeAppRouter = t.router({
 			.output(runtimeTaskWorkspaceInfoResponseSchema)
 			.query(async ({ ctx, input }) => {
 				return await ctx.workspaceApi.loadTaskContext(ctx.workspaceScope, input);
+			}),
+		getTaskWorktree: workspaceProcedure
+			.input(runtimeTaskWorkspaceInfoRequestSchema)
+			.output(runtimeTaskWorktreeStatusResponseSchema)
+			.query(async ({ ctx, input }) => {
+				return await ctx.workspaceApi.loadTaskWorktree(ctx.workspaceScope, input);
+			}),
+		keepTaskWorktree: workspaceProcedure
+			.input(runtimeTaskWorkspaceInfoRequestSchema)
+			.output(runtimeTaskWorktreeKeepResponseSchema)
+			.mutation(async ({ ctx, input }) => {
+				return await ctx.workspaceApi.keepTaskWorktree(ctx.workspaceScope, input);
+			}),
+		discardTaskWorktree: workspaceProcedure
+			.input(runtimeTaskWorkspaceInfoRequestSchema)
+			.output(runtimeTaskWorktreeDiscardResponseSchema)
+			.mutation(async ({ ctx, input }) => {
+				return await ctx.workspaceApi.discardTaskWorktree(ctx.workspaceScope, input);
 			}),
 		searchFiles: workspaceProcedure
 			.input(runtimeWorkspaceFileSearchRequestSchema)

@@ -6,6 +6,12 @@ const workspaceTaskWorktreeMocks = vi.hoisted(() => ({
 	resolveTaskCwd: vi.fn(),
 }));
 
+const strandedTaskWorktreeMocks = vi.hoisted(() => ({
+	inspectStrandedTaskWorktree: vi.fn(),
+	keepStrandedTaskWorktree: vi.fn(),
+	discardStrandedTaskWorktree: vi.fn(),
+}));
+
 const workspaceChangesMocks = vi.hoisted(() => ({
 	createEmptyWorkspaceChangesResponse: vi.fn(),
 	getWorkspaceChanges: vi.fn(),
@@ -19,6 +25,8 @@ vi.mock("../../../src/workspace/task-worktree.js", () => ({
 	getTaskWorkspaceInfo: vi.fn(),
 	resolveTaskCwd: workspaceTaskWorktreeMocks.resolveTaskCwd,
 }));
+
+vi.mock("../../../src/workspace/stranded-task-worktree.js", () => strandedTaskWorktreeMocks);
 
 vi.mock("../../../src/workspace/get-workspace-changes.js", () => ({
 	createEmptyWorkspaceChangesResponse: workspaceChangesMocks.createEmptyWorkspaceChangesResponse,
@@ -325,5 +333,146 @@ describe("createWorkspaceApi loadChanges", () => {
 		expect(response).toBe(emptyResponse);
 		expect(workspaceChangesMocks.createEmptyWorkspaceChangesResponse).toHaveBeenCalledWith("/tmp/repo");
 		expect(workspaceChangesMocks.getWorkspaceChanges).not.toHaveBeenCalled();
+	});
+});
+
+describe("createWorkspaceApi loadTaskWorktree", () => {
+	beforeEach(() => {
+		strandedTaskWorktreeMocks.inspectStrandedTaskWorktree.mockReset();
+		strandedTaskWorktreeMocks.keepStrandedTaskWorktree.mockReset();
+		strandedTaskWorktreeMocks.discardStrandedTaskWorktree.mockReset();
+	});
+
+	function createBoardSnapshot(taskId: string | null) {
+		return {
+			repoPath: "/tmp/repo",
+			statePath: "/tmp/state",
+			git: {
+				currentBranch: "main",
+				defaultBranch: "main",
+				branches: ["main"],
+			},
+			board: {
+				columns: [
+					{
+						id: "in_progress" as const,
+						title: "In Progress",
+						cards: taskId
+							? [
+									{
+										id: taskId,
+										title: "Task",
+										prompt: "Task",
+										startInPlanMode: false,
+										baseRef: "main",
+										createdAt: 1,
+										updatedAt: 1,
+									},
+								]
+							: [],
+					},
+					{ id: "backlog" as const, title: "Backlog", cards: [] },
+					{ id: "review" as const, title: "Review", cards: [] },
+					{ id: "trash" as const, title: "Done", cards: [] },
+				],
+				dependencies: [],
+			},
+			sessions: {},
+			revision: 1,
+		};
+	}
+
+	it("lists a worktree as stranded when the session is dead and the card is on the board", async () => {
+		strandedTaskWorktreeMocks.inspectStrandedTaskWorktree.mockImplementation(async (options) => ({
+			taskId: options.taskId,
+			path: "/tmp/worktree",
+			exists: true,
+			stranded:
+				options.cardOnBoard && options.sessionState !== "running" && options.sessionState !== "awaiting_review",
+			sessionState: options.sessionState,
+			headCommit: "abcdef123",
+			headShortSha: "abcdef12",
+			reachable: false,
+			recoveredBranch: "recovered/task-1",
+			recoveredBranchExists: false,
+			canDiscard: false,
+		}));
+
+		const terminalManager = {
+			getSummary: vi.fn(() => createSummary({ state: "failed" })),
+		};
+		const buildWorkspaceStateSnapshot = vi.fn(async () => createBoardSnapshot("task-1"));
+		const api = createWorkspaceApi({
+			ensureTerminalManagerForWorkspace: vi.fn(async () => terminalManager as never),
+			getScopedClineTaskSessionService: vi.fn(async () => ({ getSummary: vi.fn(() => null) }) as never),
+			broadcastRuntimeWorkspaceStateUpdated: vi.fn(),
+			broadcastRuntimeProjectsUpdated: vi.fn(),
+			buildWorkspaceStateSnapshot,
+		});
+
+		const result = await api.loadTaskWorktree(
+			{
+				workspaceId: "workspace-1",
+				workspacePath: "/tmp/repo",
+			},
+			{
+				taskId: "task-1",
+				baseRef: "main",
+			},
+		);
+
+		expect(result.stranded).toBe(true);
+		expect(result.sessionState).toBe("failed");
+		expect(strandedTaskWorktreeMocks.inspectStrandedTaskWorktree).toHaveBeenCalledWith({
+			cwd: "/tmp/repo",
+			taskId: "task-1",
+			baseRef: "main",
+			sessionState: "failed",
+			cardOnBoard: true,
+		});
+	});
+
+	it("lists a worktree as stranded when the session is missing", async () => {
+		strandedTaskWorktreeMocks.inspectStrandedTaskWorktree.mockImplementation(async (options) => ({
+			taskId: options.taskId,
+			path: "/tmp/worktree",
+			exists: true,
+			stranded: options.cardOnBoard && options.sessionState == null,
+			sessionState: options.sessionState,
+			headCommit: "abcdef123",
+			headShortSha: "abcdef12",
+			reachable: true,
+			recoveredBranch: "recovered/task-1",
+			recoveredBranchExists: false,
+			canDiscard: true,
+		}));
+
+		const api = createWorkspaceApi({
+			ensureTerminalManagerForWorkspace: vi.fn(async () => ({ getSummary: vi.fn(() => null) }) as never),
+			getScopedClineTaskSessionService: vi.fn(async () => ({ getSummary: vi.fn(() => null) }) as never),
+			broadcastRuntimeWorkspaceStateUpdated: vi.fn(),
+			broadcastRuntimeProjectsUpdated: vi.fn(),
+			buildWorkspaceStateSnapshot: vi.fn(async () => createBoardSnapshot("task-1")),
+		});
+
+		const result = await api.loadTaskWorktree(
+			{
+				workspaceId: "workspace-1",
+				workspacePath: "/tmp/repo",
+			},
+			{
+				taskId: "task-1",
+				baseRef: "main",
+			},
+		);
+
+		expect(result.stranded).toBe(true);
+		expect(result.sessionState).toBeNull();
+		expect(strandedTaskWorktreeMocks.inspectStrandedTaskWorktree).toHaveBeenCalledWith(
+			expect.objectContaining({
+				sessionState: null,
+				cardOnBoard: true,
+			}),
+		);
 	});
 });

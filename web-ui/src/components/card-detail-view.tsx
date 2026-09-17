@@ -8,6 +8,7 @@ import { ClineAgentChatPanel, type ClineAgentChatPanelHandle } from "@/component
 import { ColumnContextPanel } from "@/components/detail-panels/column-context-panel";
 import { type DiffLineComment, DiffViewerPanel } from "@/components/detail-panels/diff-viewer-panel";
 import { FileTreePanel } from "@/components/detail-panels/file-tree-panel";
+import { StrandedWorktreeBanner } from "@/components/stranded-worktree-banner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import type { ClineChatActionResult } from "@/hooks/use-cline-chat-runtime-actions";
@@ -325,6 +326,7 @@ export function CardDetailView({
 	onTaskDragEnd,
 	onCreateTask,
 	onStartTask,
+	onResumeStrandedTask,
 	onStartAllTasks,
 	onClearTrash,
 	editingTaskId,
@@ -383,6 +385,7 @@ export function CardDetailView({
 	onTaskDragEnd: (result: DropResult) => void;
 	onCreateTask?: () => void;
 	onStartTask?: (taskId: string) => void;
+	onResumeStrandedTask?: (taskId: string) => void;
 	onStartAllTasks?: () => void;
 	onClearTrash?: () => void;
 	editingTaskId?: string | null;
@@ -701,9 +704,20 @@ export function CardDetailView({
 		/>
 	);
 
+	const strandedWorktreeBanner = (
+		<StrandedWorktreeBanner
+			workspaceId={currentProjectId}
+			taskId={selection.card.id}
+			baseRef={selection.card.baseRef}
+			sessionState={sessionSummary?.state}
+			onResume={onResumeStrandedTask}
+		/>
+	);
+
 	if (isMobile) {
 		return (
 			<div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-0">
+				{strandedWorktreeBanner}
 				<MobileDetailTabBar activeTab={mobileTab} onTabChange={setMobileTab} />
 				<div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
 					<div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -840,6 +854,7 @@ export function CardDetailView({
 					<div className="flex min-h-0 flex-1 overflow-hidden">{gitHistoryPanel}</div>
 				) : (
 					<>
+						{strandedWorktreeBanner}
 						<div ref={mainRowRef} className="flex min-h-0 flex-1 overflow-hidden">
 							<div
 								className="min-h-0 min-w-0"

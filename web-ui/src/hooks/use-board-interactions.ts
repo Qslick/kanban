@@ -91,6 +91,7 @@ export interface UseBoardInteractionsResult {
 	handleMoveToTrash: () => void;
 	handleMoveReviewCardToTrash: (taskId: string) => void;
 	handleRestoreTaskFromTrash: (taskId: string) => void;
+	handleResumeStrandedTask: (taskId: string) => void;
 	handleCancelAutomaticTaskAction: (taskId: string) => void;
 	handleOpenClearTrash: () => void;
 	handleConfirmClearTrash: () => void;
@@ -808,6 +809,34 @@ export function useBoardInteractions({
 		[board, resumeTaskFromTrash, setBoard, tryProgrammaticCardMove],
 	);
 
+	const handleResumeStrandedTask = useCallback(
+		(taskId: string) => {
+			const selection = findCardSelection(board, taskId);
+			if (!selection) {
+				return;
+			}
+			if (selection.column.id === "trash") {
+				handleRestoreTaskFromTrash(taskId);
+				return;
+			}
+			if (selection.column.id === "backlog") {
+				handleStartTask(taskId);
+				return;
+			}
+			maybeRequestNotificationPermissionForTaskStart();
+			void kickoffTaskInProgress(selection.card, taskId, selection.column.id, {
+				optimisticMove: selection.column.id === "in_progress",
+			});
+		},
+		[
+			board,
+			handleRestoreTaskFromTrash,
+			handleStartTask,
+			kickoffTaskInProgress,
+			maybeRequestNotificationPermissionForTaskStart,
+		],
+	);
+
 	const handleCancelAutomaticTaskAction = useCallback(
 		(taskId: string) => {
 			setBoard((currentBoard) => {
@@ -908,6 +937,7 @@ export function useBoardInteractions({
 		handleMoveToTrash,
 		handleMoveReviewCardToTrash,
 		handleRestoreTaskFromTrash,
+		handleResumeStrandedTask,
 		handleCancelAutomaticTaskAction,
 		handleOpenClearTrash,
 		handleConfirmClearTrash,

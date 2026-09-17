@@ -6,6 +6,7 @@ import type {
 	RuntimeGitSummaryResponse,
 	RuntimeGitSyncAction,
 	RuntimeGitSyncResponse,
+	RuntimeTaskSessionState,
 	RuntimeTaskSessionSummary,
 	RuntimeWorkspaceChangesMode,
 	RuntimeWorkspaceFileSearchResponse,
@@ -13,9 +14,11 @@ import type {
 } from "../core/api-contract";
 import {
 	parseGitCheckoutRequest,
+	parseTaskWorktreeRequest,
 	parseWorktreeDeleteRequest,
 	parseWorktreeEnsureRequest,
 } from "../core/api-validation";
+import { getTaskColumnId } from "../core/task-board-mutations";
 import { saveWorkspaceState, WorkspaceStateConflictError } from "../state/workspace-state";
 import type { TerminalSessionManager } from "../terminal/session-manager";
 import {
@@ -27,6 +30,11 @@ import {
 import { getCommitDiff, getGitLog, getGitRefs } from "../workspace/git-history";
 import { discardGitChanges, getGitSyncSummary, runGitCheckoutAction, runGitSyncAction } from "../workspace/git-sync";
 import { searchWorkspaceFiles } from "../workspace/search-workspace-files";
+import {
+	discardStrandedTaskWorktree,
+	inspectStrandedTaskWorktree,
+	keepStrandedTaskWorktree,
+} from "../workspace/stranded-task-worktree";
 import {
 	deleteTaskWorktree,
 	ensureTaskWorktreeIfDoesntExist,
@@ -196,6 +204,36 @@ function isMissingTaskWorktreeError(error: unknown): boolean {
 	return error.message.startsWith("Task worktree not found for task ");
 }
 
+async function resolveTaskWorktreeSessionContext(
+	deps: CreateWorkspaceApiDependencies,
+	workspaceScope: { workspaceId: string; workspacePath: string },
+	taskId: string,
+): Promise<{ cardOnBoard: boolean; sessionState: RuntimeTaskSessionState | null }> {
+	let cardOnBoard = false;
+	let persistedSessionState: RuntimeTaskSessionState | null = null;
+	try {
+		const snapshot = await deps.buildWorkspaceStateSnapshot(workspaceScope.workspaceId, workspaceScope.workspacePath);
+		cardOnBoard = getTaskColumnId(snapshot.board, taskId) !== null;
+		persistedSessionState = snapshot.sessions[taskId]?.state ?? null;
+	} catch {
+		// Inspect the worktree even if workspace state cannot be loaded.
+	}
+
+	const terminalManager = await deps.ensureTerminalManagerForWorkspace(
+		workspaceScope.workspaceId,
+		workspaceScope.workspacePath,
+	);
+	const clineTaskSessionService = await deps.getScopedClineTaskSessionService(workspaceScope);
+	const liveSummary = selectLastTurnSummary(
+		terminalManager.getSummary(taskId),
+		clineTaskSessionService.getSummary(taskId),
+	);
+	return {
+		cardOnBoard,
+		sessionState: liveSummary?.state ?? persistedSessionState,
+	};
+}
+
 export function createWorkspaceApi(deps: CreateWorkspaceApiDependencies): RuntimeTrpcContext["workspaceApi"] {
 	return {
 		loadGitSummary: async (workspaceScope, input) => {
@@ -339,6 +377,35 @@ export function createWorkspaceApi(deps: CreateWorkspaceApiDependencies): Runtim
 				cwd: workspaceScope.workspacePath,
 				taskId: normalizedInput.taskId,
 				baseRef: normalizedInput.baseRef,
+			});
+		},
+		loadTaskWorktree: async (workspaceScope, input) => {
+			const body = parseTaskWorktreeRequest(input);
+			const sessionContext = await resolveTaskWorktreeSessionContext(deps, workspaceScope, body.taskId);
+			return await inspectStrandedTaskWorktree({
+				cwd: workspaceScope.workspacePath,
+				taskId: body.taskId,
+				baseRef: body.baseRef,
+				sessionState: sessionContext.sessionState,
+				cardOnBoard: sessionContext.cardOnBoard,
+			});
+		},
+		keepTaskWorktree: async (workspaceScope, input) => {
+			const body = parseTaskWorktreeRequest(input);
+			return await keepStrandedTaskWorktree({
+				cwd: workspaceScope.workspacePath,
+				taskId: body.taskId,
+				baseRef: body.baseRef,
+			});
+		},
+		discardTaskWorktree: async (workspaceScope, input) => {
+			const body = parseTaskWorktreeRequest(input);
+			const sessionContext = await resolveTaskWorktreeSessionContext(deps, workspaceScope, body.taskId);
+			return await discardStrandedTaskWorktree({
+				cwd: workspaceScope.workspacePath,
+				taskId: body.taskId,
+				baseRef: body.baseRef,
+				sessionState: sessionContext.sessionState,
 			});
 		},
 		searchFiles: async (workspaceScope, input) => {

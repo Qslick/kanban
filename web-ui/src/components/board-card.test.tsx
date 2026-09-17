@@ -796,4 +796,54 @@ describe("BoardCard", () => {
 		expect(container.textContent).toContain("checking the next file");
 		expect(container.textContent).not.toContain("Agent:");
 	});
+
+	it("shows a stranded worktree badge when the session is dead and HEAD still exists", async () => {
+		mockWorkspaceSnapshot = {
+			taskId: "task-1",
+			path: "/tmp/worktrees/task-1",
+			branch: null,
+			isDetached: true,
+			headCommit: "abcdef123456",
+			changedFiles: 0,
+			additions: 0,
+			deletions: 0,
+		};
+
+		await act(async () => {
+			root.render(
+				<BoardCard card={createCard()} index={0} columnId="in_progress" sessionSummary={createSummary("failed")} />,
+			);
+		});
+
+		expect(container.querySelector('[data-testid="stranded-worktree-badge"]')?.textContent).toContain(
+			"Stranded worktree",
+		);
+		expect(container.textContent).toContain("abcdef12");
+	});
+
+	it("does not show a stranded worktree badge while the session is running", async () => {
+		mockWorkspaceSnapshot = {
+			taskId: "task-1",
+			path: "/tmp/worktrees/task-1",
+			branch: null,
+			isDetached: true,
+			headCommit: "abcdef123456",
+			changedFiles: 0,
+			additions: 0,
+			deletions: 0,
+		};
+
+		await act(async () => {
+			root.render(
+				<BoardCard
+					card={createCard()}
+					index={0}
+					columnId="in_progress"
+					sessionSummary={createSummary("running")}
+				/>,
+			);
+		});
+
+		expect(container.querySelector('[data-testid="stranded-worktree-badge"]')).toBeNull();
+	});
 });

@@ -570,6 +570,7 @@ export default function App(): ReactElement {
 		handleMoveToTrash,
 		handleMoveReviewCardToTrash,
 		handleRestoreTaskFromTrash,
+		handleResumeStrandedTask,
 		handleCancelAutomaticTaskAction,
 		handleOpenClearTrash,
 		handleConfirmClearTrash,
@@ -1012,6 +1013,7 @@ export default function App(): ReactElement {
 									onTaskDragEnd={handleDetailTaskDragEnd}
 									onCreateTask={handleOpenCreateTask}
 									onStartTask={handleStartTaskFromBoard}
+									onResumeStrandedTask={handleResumeStrandedTask}
 									onStartAllTasks={handleStartAllBacklogTasksFromBoard}
 									onClearTrash={handleOpenClearTrash}
 									editingTaskId={editingTaskId}

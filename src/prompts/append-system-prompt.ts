@@ -359,6 +359,24 @@ Parameters:
 Notes:
 - If In Progress already has the configured maximum number of tasks (default 3, \`maxInProgressTasks\`), this command fails without stopping running tasks. Finish or move a task first.
 
+## task worktree
+
+Purpose: inspect a task worktree after a session dies, preserve HEAD on \`recovered/<task_id>\`, or discard the worktree only when that commit is already reachable from a branch or tag.
+
+Command:
+\`${kanbanCommand} task worktree --task-id <task_id> [--keep | --discard] [--project-path <path>]\`
+
+Parameters:
+- \`--task-id <task_id>\` required task ID. The card must still be on the board.
+- \`--keep\` optional. Create or update \`recovered/<task_id>\` at the worktree HEAD without deleting the worktree.
+- \`--discard\` optional. Delete the worktree only if HEAD is reachable from a branch or tag. Refuses otherwise so the only copy of a commit is never deleted.
+- \`--project-path <path>\` optional workspace path. If not already registered in Kanban, it is auto-added for git repos.
+
+Notes:
+- Default output is JSON with \`path\`, \`head\`, \`reachable\`, \`stranded\`, and \`recoveredBranch\`.
+- A worktree is stranded when it still exists, the card is on the board, and the session is failed, interrupted, idle, or missing.
+- Never \`--discard\` until Keep is unnecessary (HEAD already reachable) or after a successful \`--keep\`.
+
 # Per-Task Agent, Provider, Model, and Effort Overrides
 
 Tasks can override the workspace default agent, and additionally carry per-task provider, model, and reasoning-effort settings. Kanban stores these values on the card and passes them verbatim to whichever agent launches the task. Kanban never validates model IDs or effort vocabularies — that is each agent's job at launch.

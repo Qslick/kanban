@@ -30,6 +30,7 @@ Install this checkout with `npm run link`. Roll back to the published binary wit
 | premium_saas_ui_redesign | Visual pass on board columns, cards, project rows, and top bar |
 | feat/verify-before-done | Optional `verifyCommand`; auto-review waits for `task verify` ok |
 | feat/concurrency-cap | `maxInProgressTasks` default 3; Play / start refuse at cap |
+| feat/stranded-worktree | Keep / Resume / Discard for stranded task worktrees; `task worktree` CLI |
 
 ## Skipped
 
