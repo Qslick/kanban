@@ -204,12 +204,28 @@ Parameters:
 - \`--task-id <task_id>\` required task ID.
 - \`--project-path <path>\` optional workspace path. If omitted, uses the current working directory workspace.
 
+## task verify
+
+Purpose: run the card's \`verifyCommand\` in the task worktree and record \`verifyResult\`. Auto-review will not arm a git commit or move the card to Done while a command is set and the last result is missing or \`ok: false\`. Manual Done is still allowed.
+
+Command:
+\`${kanbanCommand} task verify --task-id <task_id> [--project-path <path>]\`
+
+Parameters:
+- \`--task-id <task_id>\` required task ID.
+- \`--project-path <path>\` optional workspace path. If omitted, uses the current working directory workspace.
+
+Notes:
+- The JSON response includes \`passed\` and \`verifyResult\`. Exit code is 1 when verification fails.
+- Set the command with \`task create --verify-command\` or \`task update --verify-command\`. Cards without a command are not blocked.
+- Run this after the work is done and before auto-review should complete.
+
 ## task create
 
 Purpose: create a new task in \`backlog\`, with optional plan mode, auto-review behavior, and per-task agent/provider/model/effort overrides.
 
 Command:
-\`${kanbanCommand} task create [--title "<text>"] --prompt "<text>" [--project-path <path>] [--base-ref <branch>] [--start-in-plan-mode <true|false>] [--auto-review-enabled <true|false>] [--auto-review-mode commit|pr] [--agent-id <id>] [--provider <id>] [--model <id>] [--effort <level>]\`
+\`${kanbanCommand} task create [--title "<text>"] --prompt "<text>" [--project-path <path>] [--base-ref <branch>] [--start-in-plan-mode <true|false>] [--auto-review-enabled <true|false>] [--auto-review-mode commit|pr] [--verify-command "<command>"] [--agent-id <id>] [--provider <id>] [--model <id>] [--effort <level>]\`
 
 Parameters:
 - \`--title "<text>"\` optional task title. If omitted, Kanban derives one from the prompt.
@@ -219,6 +235,7 @@ Parameters:
 - \`--start-in-plan-mode <true|false>\` optional. Default false. Set true only when explicitly requested.
 - \`--auto-review-enabled <true|false>\` optional. Default false. Enables automatic action once task reaches review.
 - \`--auto-review-mode commit|pr\` optional auto-review action. Default \`commit\`.
+- \`--verify-command "<command>"\` optional command run in the task worktree before auto-review may arm a git commit or move the card to Done. Omit it unless the user asked for verification. Cards without a command are unchanged.
 - \`--agent-id <id>\` optional per-task agent override: \`cline\` | \`claude\` | \`codex\` | \`droid\` | \`kiro\` | \`gemini\` | \`opencode\`. If omitted, the task inherits the workspace default agent.
 - \`--provider <id>\` optional provider override for the task's agent. Valid values depend on the target agent; only some agents read a provider.
 - \`--model <id>\` optional model override for the task's agent. Passed to the agent verbatim; valid values depend on the target agent.
@@ -230,7 +247,7 @@ Parameters:
 Purpose: update an existing task, including prompt, base ref, plan mode, auto-review behavior, and per-task agent/provider/model/effort overrides.
 
 Command:
-\`${kanbanCommand} task update --task-id <task_id> [--title "<text>"] [--prompt "<text>"] [--project-path <path>] [--base-ref <branch>] [--start-in-plan-mode <true|false>] [--auto-review-enabled <true|false>] [--auto-review-mode commit|pr] [--agent-id <id>] [--provider <id>] [--model <id>] [--effort <level>]\`
+\`${kanbanCommand} task update --task-id <task_id> [--title "<text>"] [--prompt "<text>"] [--project-path <path>] [--base-ref <branch>] [--start-in-plan-mode <true|false>] [--auto-review-enabled <true|false>] [--auto-review-mode commit|pr] [--verify-command "<command>"] [--agent-id <id>] [--provider <id>] [--model <id>] [--effort <level>]\`
 
 Parameters:
 - \`--task-id <task_id>\` required task ID.
@@ -241,6 +258,7 @@ Parameters:
 - \`--start-in-plan-mode <true|false>\` optional replacement of plan-mode behavior.
 - \`--auto-review-enabled <true|false>\` optional replacement of auto-review toggle. Set false to cancel pending automatic review actions.
 - \`--auto-review-mode commit|pr\` optional replacement auto-review action.
+- \`--verify-command "<command>"\` optional replacement verification command. Use \`default\` to clear. Changing the command clears the last recorded result.
 - \`--agent-id <id>\` optional replacement per-task agent override. Use \`default\` to clear the override and inherit the workspace default agent.
 - \`--provider <id>\` optional replacement provider override. Use \`default\` to clear.
 - \`--model <id>\` optional replacement model override. Use \`default\` to clear.

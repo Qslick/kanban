@@ -100,6 +100,14 @@ describe("renderAppendSystemPrompt", () => {
 		expect(rendered).toContain("kanban agents");
 	});
 
+	it("documents verify-command and task verify", () => {
+		const rendered = renderAppendSystemPrompt("kanban");
+
+		expect(rendered).toContain("--verify-command");
+		expect(rendered).toContain("## task verify");
+		expect(rendered).toContain("task verify --task-id");
+	});
+
 	it("documents the agents capability command", () => {
 		const rendered = renderAppendSystemPrompt("kanban");
 

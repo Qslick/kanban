@@ -250,6 +250,27 @@ describe("registerTaskCommand agent-id help", () => {
 	});
 });
 
+describe("registerTaskCommand verify-command", () => {
+	function getOptionDescription(commandName: "create" | "update" | "verify", flag: string): string | undefined {
+		const program = new Command();
+		registerTaskCommand(program);
+		const task = program.commands.find((command) => command.name() === "task");
+		const subcommand = task?.commands.find((command) => command.name() === commandName);
+		return subcommand?.options.find((option) => option.long === flag)?.description;
+	}
+
+	it("exposes --verify-command on create and update and a verify subcommand", () => {
+		expect(getOptionDescription("create", "--verify-command")).toContain("worktree");
+		expect(getOptionDescription("update", "--verify-command")).toContain("default");
+		const program = new Command();
+		registerTaskCommand(program);
+		const task = program.commands.find((command) => command.name() === "task");
+		const verify = task?.commands.find((command) => command.name() === "verify");
+		expect(verify).toBeDefined();
+		expect(verify?.options.some((option) => option.long === "--task-id")).toBe(true);
+	});
+});
+
 function createBoard(): RuntimeBoardData {
 	return {
 		columns: [

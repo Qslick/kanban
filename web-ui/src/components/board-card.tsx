@@ -2,7 +2,17 @@ import { Draggable } from "@hello-pangea/dnd";
 import { getRuntimeAgentCatalogEntry } from "@runtime-agent-catalog";
 import { formatClineToolCallLabel } from "@runtime-cline-tool-call-display";
 import { buildTaskWorktreeDisplayPath } from "@runtime-task-worktree-path";
-import { AlertCircle, AlertTriangle, Bot, GitBranch, Pencil, Play, RotateCcw, Trash2 } from "lucide-react";
+import {
+	AlertCircle,
+	AlertTriangle,
+	Bot,
+	CheckCircle2,
+	GitBranch,
+	Pencil,
+	Play,
+	RotateCcw,
+	Trash2,
+} from "lucide-react";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -18,7 +28,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import type { RuntimeTaskSessionSummary } from "@/runtime/types";
 import { useTaskWorkspaceSnapshotValue } from "@/stores/workspace-metadata-store";
 import type { BoardCard as BoardCardModel, BoardColumnId } from "@/types";
-import { getTaskAutoReviewCancelButtonLabel } from "@/types";
+import { getTaskAutoReviewCancelButtonLabel, getTaskVerifyStatus } from "@/types";
 import { formatPathForDisplay } from "@/utils/path-display";
 import { useMeasure } from "@/utils/react-use";
 import {
@@ -467,6 +477,23 @@ export function BoardCard({
 		const parts = [agentOverrideLabel, modelOverrideLabel].filter((value): value is string => Boolean(value));
 		return parts.length > 0 ? parts.join(" · ") : null;
 	}, [agentOverrideLabel, modelOverrideLabel]);
+	const verifyStatus = useMemo(() => getTaskVerifyStatus(card), [card]);
+	const verifyTooltip = useMemo(() => {
+		if (!verifyStatus || !card.verifyCommand) {
+			return null;
+		}
+		const output = card.verifyResult?.output?.trim();
+		if (!output) {
+			return card.verifyCommand;
+		}
+		const truncated = output.length > 400 ? `${output.slice(0, 400)}…` : output;
+		return (
+			<>
+				<div>{card.verifyCommand}</div>
+				<div className="mt-1 whitespace-pre-wrap text-text-secondary">{truncated}</div>
+			</>
+		);
+	}, [card.verifyCommand, card.verifyResult?.output, verifyStatus]);
 
 	const activeDescriptionDisplay = isDescriptionExpanded ? descriptionDisplay.expanded : descriptionDisplay.collapsed;
 
@@ -724,6 +751,31 @@ export function BoardCard({
 										<Bot size={12} className="shrink-0" />
 										<span className="truncate">{taskAgentSettingsLabel}</span>
 									</span>
+								</div>
+							) : null}
+							{verifyStatus ? (
+								<div className="mt-1">
+									<Tooltip content={verifyTooltip}>
+										<span
+											className={cn(
+												"inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs",
+												isTrashCard
+													? "border-border text-text-tertiary bg-surface-1"
+													: verifyStatus.kind === "passed"
+														? "border-status-green/30 bg-status-green/10 text-status-green"
+														: verifyStatus.kind === "failed"
+															? "border-status-red/30 bg-status-red/10 text-status-red"
+															: "border-border text-text-tertiary bg-surface-1",
+											)}
+										>
+											{verifyStatus.kind === "passed" ? (
+												<CheckCircle2 size={12} className="shrink-0" />
+											) : verifyStatus.kind === "failed" ? (
+												<AlertCircle size={12} className="shrink-0" />
+											) : null}
+											<span className="truncate">{verifyStatus.label}</span>
+										</span>
+									</Tooltip>
 								</div>
 							) : null}
 							{sessionActivity ? (

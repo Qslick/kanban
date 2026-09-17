@@ -491,6 +491,130 @@ describe("auto-review reconciler", () => {
 		expect(result?.card.pendingGitAction ?? null).toBeNull();
 		expect(harness.terminal.writeInput).not.toHaveBeenCalled();
 	});
+
+	it("arms a git action when verifyCommand is set and the last result passed", async () => {
+		const card = createCard({
+			id: "task-1",
+			autoReviewEnabled: true,
+			verifyCommand: "npm test",
+			verifyResult: {
+				ok: true,
+				output: "ok",
+				recordedAt: 1,
+			},
+		});
+		const harness = createHarness({ board: createBoard({ review: [card] }) });
+		harness.setProbe("task-1", { exists: true, headCommit: "commit-1", changedFiles: 3 });
+
+		await harness.evaluate();
+
+		expect(findCardInBoard(harness.store.stored.board, "task-1")?.card.pendingGitAction).not.toBeNull();
+		expect(harness.terminal.writeInput).toHaveBeenCalled();
+	});
+
+	it("does not arm a git action when verifyCommand is set and the last result is not ok", async () => {
+		const card = createCard({
+			id: "task-1",
+			autoReviewEnabled: true,
+			verifyCommand: "npm test",
+		});
+		const harness = createHarness({ board: createBoard({ review: [card] }) });
+		harness.setProbe("task-1", { exists: true, headCommit: "commit-1", changedFiles: 3 });
+
+		await harness.evaluate();
+
+		expect(findCardInBoard(harness.store.stored.board, "task-1")?.columnId).toBe("review");
+		expect(findCardInBoard(harness.store.stored.board, "task-1")?.card.pendingGitAction ?? null).toBeNull();
+		expect(harness.terminal.writeInput).not.toHaveBeenCalled();
+	});
+
+	it("skips complete when verifyCommand is set and the last result is missing", async () => {
+		const armedCard = createCard({
+			id: "task-1",
+			autoReviewEnabled: true,
+			verifyCommand: "npm test",
+			pendingGitAction: {
+				action: "commit",
+				requestedAt: Date.now(),
+				headCommitAtRequest: "commit-1",
+				attempt: 0,
+			},
+		});
+		const harness = createHarness({ board: createBoard({ review: [armedCard] }) });
+		harness.setProbe("task-1", { exists: true, headCommit: "commit-2", changedFiles: 0 });
+
+		await harness.evaluate();
+
+		const result = findCardInBoard(harness.store.stored.board, "task-1");
+		expect(result?.columnId).toBe("review");
+		expect(result?.card.pendingGitAction).not.toBeNull();
+	});
+
+	it("skips complete when verifyCommand is set and the last result failed", async () => {
+		const armedCard = createCard({
+			id: "task-1",
+			autoReviewEnabled: true,
+			verifyCommand: "npm test",
+			verifyResult: {
+				ok: false,
+				output: "1 failing",
+				recordedAt: 1,
+			},
+			pendingGitAction: {
+				action: "commit",
+				requestedAt: Date.now(),
+				headCommitAtRequest: "commit-1",
+				attempt: 0,
+			},
+		});
+		const harness = createHarness({ board: createBoard({ review: [armedCard] }) });
+		harness.setProbe("task-1", { exists: true, headCommit: "commit-2", changedFiles: 0 });
+
+		await harness.evaluate();
+
+		const result = findCardInBoard(harness.store.stored.board, "task-1");
+		expect(result?.columnId).toBe("review");
+		expect(result?.card.pendingGitAction).not.toBeNull();
+	});
+
+	it("completes an armed card when verifyCommand is set and the last result passed", async () => {
+		const armedCard = createCard({
+			id: "task-1",
+			autoReviewEnabled: true,
+			verifyCommand: "npm test",
+			verifyResult: {
+				ok: true,
+				output: "ok",
+				recordedAt: 1,
+			},
+			pendingGitAction: {
+				action: "commit",
+				requestedAt: Date.now(),
+				headCommitAtRequest: "commit-1",
+				attempt: 0,
+			},
+		});
+		const harness = createHarness({ board: createBoard({ review: [armedCard] }) });
+		harness.setProbe("task-1", { exists: true, headCommit: "commit-2", changedFiles: 0 });
+
+		await harness.evaluate();
+
+		const completed = findCardInBoard(harness.store.stored.board, "task-1");
+		expect(completed?.columnId).toBe("trash");
+		expect(completed?.card.pendingGitAction ?? null).toBeNull();
+		expect(completed?.card.verifyResult?.ok).toBe(true);
+	});
+
+	it("leaves cards without verifyCommand on the existing auto-review path", async () => {
+		const card = createCard({ id: "task-1", autoReviewEnabled: true });
+		const harness = createHarness({ board: createBoard({ review: [card] }) });
+		harness.setProbe("task-1", { exists: true, headCommit: "commit-1", changedFiles: 3 });
+
+		await harness.evaluate();
+
+		expect(findCardInBoard(harness.store.stored.board, "task-1")?.card.pendingGitAction).not.toBeNull();
+		expect(findCardInBoard(harness.store.stored.board, "task-1")?.card.verifyCommand).toBeUndefined();
+	});
 });
 
 function findCardInBoard(

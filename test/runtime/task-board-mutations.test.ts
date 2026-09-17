@@ -7,6 +7,7 @@ import {
 	deleteTasksFromBoard,
 	getUnfinishedPrerequisiteTaskIds,
 	moveTaskToColumn,
+	recordTaskVerifyResult,
 	trashTaskAndGetReadyLinkedTaskIds,
 	updateTask,
 } from "../../src/core/task-board-mutations";
@@ -271,6 +272,117 @@ describe("per-task agent/model/provider overrides", () => {
 			modelId: "claude-sonnet-4-20250514",
 			reasoningEffort: "high",
 		});
+	});
+});
+
+describe("task verification fields", () => {
+	it("stores verifyCommand on create and leaves verifyResult unset", () => {
+		const created = addTaskToColumn(
+			createBoard(),
+			"backlog",
+			{ prompt: "Task", baseRef: "main", verifyCommand: " npm test " },
+			() => "aaaaa111",
+		);
+
+		expect(created.task.verifyCommand).toBe("npm test");
+		expect(created.task.verifyResult).toBeUndefined();
+	});
+
+	it("leaves verify fields undefined when no command is provided", () => {
+		const created = addTaskToColumn(createBoard(), "backlog", { prompt: "Task", baseRef: "main" }, () => "aaaaa111");
+
+		expect(created.task.verifyCommand).toBeUndefined();
+		expect(created.task.verifyResult).toBeUndefined();
+	});
+
+	it("records a verify result onto the card", () => {
+		const created = addTaskToColumn(
+			createBoard(),
+			"backlog",
+			{ prompt: "Task", baseRef: "main", verifyCommand: "npm test" },
+			() => "aaaaa111",
+		);
+		const recorded = recordTaskVerifyResult(created.board, created.task.id, {
+			ok: true,
+			output: "pass",
+			recordedAt: 42,
+		});
+
+		expect(recorded.updated).toBe(true);
+		expect(recorded.task?.verifyCommand).toBe("npm test");
+		expect(recorded.task?.verifyResult).toEqual({
+			ok: true,
+			output: "pass",
+			recordedAt: 42,
+		});
+	});
+
+	it("preserves verifyResult when update omits the command", () => {
+		const created = addTaskToColumn(
+			createBoard(),
+			"backlog",
+			{ prompt: "Task", baseRef: "main", verifyCommand: "npm test" },
+			() => "aaaaa111",
+		);
+		const recorded = recordTaskVerifyResult(created.board, created.task.id, {
+			ok: false,
+			output: "fail",
+			recordedAt: 7,
+		});
+		const updated = updateTask(recorded.board, created.task.id, {
+			prompt: "Updated prompt",
+			baseRef: "main",
+		});
+
+		expect(updated.task?.verifyCommand).toBe("npm test");
+		expect(updated.task?.verifyResult).toEqual({
+			ok: false,
+			output: "fail",
+			recordedAt: 7,
+		});
+	});
+
+	it("clears verifyResult when the command changes", () => {
+		const created = addTaskToColumn(
+			createBoard(),
+			"backlog",
+			{ prompt: "Task", baseRef: "main", verifyCommand: "npm test" },
+			() => "aaaaa111",
+		);
+		const recorded = recordTaskVerifyResult(created.board, created.task.id, {
+			ok: true,
+			output: "pass",
+			recordedAt: 7,
+		});
+		const updated = updateTask(recorded.board, created.task.id, {
+			prompt: "Task",
+			baseRef: "main",
+			verifyCommand: "npm run lint",
+		});
+
+		expect(updated.task?.verifyCommand).toBe("npm run lint");
+		expect(updated.task?.verifyResult).toBeUndefined();
+	});
+
+	it("clears verify fields when update sets verifyCommand to null", () => {
+		const created = addTaskToColumn(
+			createBoard(),
+			"backlog",
+			{ prompt: "Task", baseRef: "main", verifyCommand: "npm test" },
+			() => "aaaaa111",
+		);
+		const recorded = recordTaskVerifyResult(created.board, created.task.id, {
+			ok: true,
+			recordedAt: 7,
+		});
+		const updated = updateTask(recorded.board, created.task.id, {
+			prompt: "Task",
+			baseRef: "main",
+			verifyCommand: null,
+		});
+
+		expect(updated.task?.verifyCommand).toBeUndefined();
+		expect(updated.task?.verifyResult).toBeUndefined();
 	});
 });
 
