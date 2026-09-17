@@ -129,6 +129,24 @@ describe("runtimeBoardCardSchema pendingGitAction", () => {
 		});
 	});
 
+	it("parses panel review fields on a card", () => {
+		const parsed = runtimeBoardCardSchema.parse({
+			...legacyCard,
+			panelReviewMode: "custom",
+			panelReviewFamilies: ["grok", "gpt"],
+			panelReviewRun: {
+				status: "passed",
+				verdicts: [{ family: "grok", verdict: "APPROVE" }],
+				recordedAt: 9,
+				headCommit: "abc",
+			},
+		});
+		expect(parsed.panelReviewMode).toBe("custom");
+		expect(parsed.panelReviewFamilies).toEqual(["grok", "gpt"]);
+		expect(parsed.panelReviewRun?.status).toBe("passed");
+		expect(parsed.panelReviewRun?.headCommit).toBe("abc");
+	});
+
 	it("rejects an unknown pendingGitAction action", () => {
 		expect(() =>
 			runtimeBoardCardSchema.parse({

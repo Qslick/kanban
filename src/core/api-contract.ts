@@ -1,11 +1,28 @@
 import { z } from "zod";
-import {
-	PANEL_REVIEW_FAMILIES,
-	PANEL_REVIEW_MODES,
-	PANEL_REVIEW_RUN_STATUSES,
-	PANEL_REVIEW_VERDICTS,
-} from "./panel-review.js";
+import { panelReviewFamilySchema, panelReviewModeSchema, panelReviewRunSchema } from "./panel-review";
 import { resolveTaskTitle } from "./task-title.js";
+
+export type {
+	PanelReviewConfig,
+	PanelReviewFamily,
+	PanelReviewMode,
+	PanelReviewRun,
+	PanelReviewRunStatus,
+	PanelReviewVerdict,
+	PanelReviewVerdictKind,
+} from "./panel-review";
+export {
+	DEFAULT_PANEL_REVIEW_CONFIG,
+	DEFAULT_PANEL_REVIEW_ENABLED,
+	DEFAULT_PANEL_REVIEW_FAMILIES,
+	DEFAULT_PANEL_REVIEW_MODE,
+	panelReviewFamilySchema,
+	panelReviewModeSchema,
+	panelReviewRunSchema,
+	panelReviewRunStatusSchema,
+	panelReviewVerdictKindSchema,
+	panelReviewVerdictSchema,
+} from "./panel-review";
 
 export const runtimeWorkspaceFileStatusSchema = z.enum([
 	"modified",
@@ -156,27 +173,11 @@ export const runtimeTaskVerifyResultSchema = z.object({
 	recordedAt: z.number(),
 });
 export type RuntimeTaskVerifyResult = z.infer<typeof runtimeTaskVerifyResultSchema>;
-export const runtimePanelReviewFamilySchema = z.enum(PANEL_REVIEW_FAMILIES);
+export const runtimePanelReviewFamilySchema = panelReviewFamilySchema;
 export type RuntimePanelReviewFamily = z.infer<typeof runtimePanelReviewFamilySchema>;
-
-export const runtimePanelReviewModeSchema = z.enum(PANEL_REVIEW_MODES);
+export const runtimePanelReviewModeSchema = panelReviewModeSchema;
 export type RuntimePanelReviewMode = z.infer<typeof runtimePanelReviewModeSchema>;
-
-export const runtimePanelReviewVerdictSchema = z.enum(PANEL_REVIEW_VERDICTS);
-export type RuntimePanelReviewVerdict = z.infer<typeof runtimePanelReviewVerdictSchema>;
-
-export const runtimePanelReviewRunSchema = z.object({
-	status: z.enum(PANEL_REVIEW_RUN_STATUSES),
-	families: z.array(runtimePanelReviewFamilySchema),
-	verdicts: z.array(
-		z.object({
-			family: runtimePanelReviewFamilySchema,
-			verdict: runtimePanelReviewVerdictSchema,
-		}),
-	),
-	recordedAt: z.number(),
-	reportPath: z.string().optional(),
-});
+export const runtimePanelReviewRunSchema = panelReviewRunSchema;
 export type RuntimePanelReviewRun = z.infer<typeof runtimePanelReviewRunSchema>;
 
 export const runtimeBoardCardSchema = z
@@ -200,9 +201,9 @@ export const runtimeBoardCardSchema = z
 		pendingGitAction: runtimeTaskPendingGitActionSchema.nullable().optional(),
 		verifyCommand: z.string().optional(),
 		verifyResult: runtimeTaskVerifyResultSchema.optional(),
-		panelReviewMode: runtimePanelReviewModeSchema.optional(),
-		panelReviewFamilies: z.array(runtimePanelReviewFamilySchema).optional(),
-		panelReviewRun: runtimePanelReviewRunSchema.optional(),
+		panelReviewMode: panelReviewModeSchema.optional(),
+		panelReviewFamilies: z.array(panelReviewFamilySchema).optional(),
+		panelReviewRun: panelReviewRunSchema.optional(),
 	})
 	.transform(
 		({

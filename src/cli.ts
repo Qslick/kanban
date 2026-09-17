@@ -537,6 +537,13 @@ async function startServer(): Promise<{
 			const config = await workspaceRegistry.loadScopedRuntimeConfig({ workspaceId, workspacePath });
 			return config.selectedAgentId;
 		},
+		getPanelReviewConfig: async (workspaceId, workspacePath) => {
+			const config = await workspaceRegistry.loadScopedRuntimeConfig({ workspaceId, workspacePath });
+			return {
+				panelReviewEnabled: config.panelReviewEnabled,
+				panelReviewFamilies: config.panelReviewFamilies,
+			};
+		},
 		getClineTaskSessionService: (workspaceId) => clineTaskSessionServiceByWorkspaceId.get(workspaceId) ?? null,
 		onBoardMutated: (workspaceId, workspacePath) =>
 			void runtimeHub.broadcastRuntimeWorkspaceStateUpdated(workspaceId, workspacePath),

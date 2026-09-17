@@ -606,6 +606,41 @@ describe("board dependency state", () => {
 		});
 	});
 
+	it("preserves panel review fields when normalizing a board", () => {
+		const normalized = normalizeBoardData({
+			columns: [
+				{ id: "backlog", cards: [] },
+				{ id: "in_progress", cards: [] },
+				{
+					id: "review",
+					cards: [
+						{
+							id: "task-1",
+							prompt: "Review me",
+							startInPlanMode: false,
+							baseRef: "main",
+							panelReviewMode: "custom",
+							panelReviewFamilies: ["gpt"],
+							panelReviewRun: {
+								status: "rejected",
+								verdicts: [{ family: "gpt", verdict: "REJECT" }],
+								recordedAt: 12,
+								headCommit: "abc",
+							},
+						},
+					],
+				},
+				{ id: "trash", cards: [] },
+			],
+			dependencies: [],
+		});
+		const card = normalized?.columns.find((column) => column.id === "review")?.cards[0];
+		expect(card?.panelReviewMode).toBe("custom");
+		expect(card?.panelReviewFamilies).toEqual(["gpt"]);
+		expect(card?.panelReviewRun?.status).toBe("rejected");
+		expect(card?.panelReviewRun?.headCommit).toBe("abc");
+	});
+
 	it("disables auto-review settings for a task", () => {
 		let board = createInitialBoardData();
 		board = addTaskToColumn(board, "review", {

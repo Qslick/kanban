@@ -21,6 +21,15 @@ import type {
 	RuntimeTaskSessionSummary,
 	RuntimeWorkspaceStateResponse,
 } from "../core/api-contract";
+import type { PanelReviewConfig, PanelReviewRun } from "../core/panel-review";
+import {
+	createPendingPanelReviewRun,
+	createSkippedPanelReviewRun,
+	DEFAULT_PANEL_REVIEW_CONFIG,
+	isPanelReviewRunStale,
+	panelReviewAllowsAutoReview,
+	resolveEffectivePanelReview,
+} from "../core/panel-review";
 import { isPendingGitActionStale, moveTaskToColumn } from "../core/task-board-mutations";
 import { isTaskVerificationSatisfied } from "../core/task-verification";
 import type {
@@ -30,6 +39,8 @@ import type {
 import type { TerminalSessionManager } from "../terminal/session-manager";
 import { probeGitWorkspaceState } from "../workspace/git-sync";
 import { getTaskWorkspacePathInfo } from "../workspace/task-worktree";
+import type { DispatchPanelSeats, RunPanelReviewInput } from "./panel-review-runner";
+import { createPanelReviewRunner, createStubPanelSeatDispatcher } from "./panel-review-runner";
 
 /**
  * Evaluation cadence. Nothing here is latency critical: a slower interval
@@ -85,6 +96,15 @@ export interface CreateAutoReviewReconcilerDependencies {
 		taskId: string;
 		baseRef: string;
 	}) => Promise<AutoReviewTaskProbe>;
+	/** Workspace-level panel-review settings. Defaults to disabled. */
+	getPanelReviewConfig?: (workspaceId: string, workspacePath: string) => Promise<PanelReviewConfig>;
+	/**
+	 * Injectable panel-seat dispatcher so tests never call real CLIs.
+	 * Production uses a stub until a real read-only dispatcher is wired.
+	 */
+	dispatchPanelSeats?: DispatchPanelSeats;
+	/** Full panel runner; tests can inject this instead of a dispatcher. */
+	runPanelReview?: (input: RunPanelReviewInput) => Promise<PanelReviewRun>;
 	/**
 	 * Notified after the reconciler mutates a board so connected browsers can
 	 * resync. Optional: reconciliation is correct without it, browsers just
@@ -220,6 +240,11 @@ async function defaultProbeTaskWorkspace(input: {
 export function createAutoReviewReconciler(deps: CreateAutoReviewReconcilerDependencies): AutoReviewReconciler {
 	const workspaceRuntimes = new Map<string, ReconcilerWorkspaceRuntime>();
 	const probeTaskWorkspace = deps.probeTaskWorkspace ?? defaultProbeTaskWorkspace;
+	const runPanelReview =
+		deps.runPanelReview ??
+		createPanelReviewRunner({
+			dispatchPanelSeats: deps.dispatchPanelSeats ?? createStubPanelSeatDispatcher(),
+		}).run;
 	let disposed = false;
 	let evaluationTimer: NodeJS.Timeout | null = null;
 
@@ -286,6 +311,32 @@ export function createAutoReviewReconciler(deps: CreateAutoReviewReconcilerDepen
 					board: replaceBoardCard(currentState.board, taskId, {
 						...location.card,
 						pendingGitAction: null,
+						updatedAt: deps.now?.() ?? Date.now(),
+					}),
+					value: true,
+				};
+			});
+			return response.value;
+		} catch {
+			return false;
+		}
+	};
+
+	const persistPanelReviewRun = async (
+		workspacePath: string,
+		taskId: string,
+		panelReviewRun: PanelReviewRun,
+	): Promise<boolean> => {
+		try {
+			const response = await deps.mutateWorkspaceState(workspacePath, (currentState) => {
+				const location = findCardLocation(currentState.board, taskId);
+				if (location?.columnId !== "review") {
+					return { board: currentState.board, value: false, save: false };
+				}
+				return {
+					board: replaceBoardCard(currentState.board, taskId, {
+						...location.card,
+						panelReviewRun,
 						updatedAt: deps.now?.() ?? Date.now(),
 					}),
 					value: true,
@@ -454,6 +505,13 @@ export function createAutoReviewReconciler(deps: CreateAutoReviewReconcilerDepen
 			} catch {
 				templates = null;
 			}
+			let panelReviewConfig: PanelReviewConfig = DEFAULT_PANEL_REVIEW_CONFIG;
+			try {
+				panelReviewConfig =
+					(await deps.getPanelReviewConfig?.(workspace.workspaceId, workspacePath)) ?? DEFAULT_PANEL_REVIEW_CONFIG;
+			} catch {
+				panelReviewConfig = DEFAULT_PANEL_REVIEW_CONFIG;
+			}
 			// One probe per card per cycle, even if both the armed and unarmed
 			// branches look at the same card.
 			const probeCache = new Map<string, Promise<AutoReviewTaskProbe>>();
@@ -542,6 +600,64 @@ export function createAutoReviewReconciler(deps: CreateAutoReviewReconcilerDepen
 
 				runtime.gitActionInFlightTaskIds.add(card.id);
 				try {
+					const effectivePanel = resolveEffectivePanelReview({
+						config: panelReviewConfig,
+						cardMode: card.panelReviewMode,
+						cardFamilies: card.panelReviewFamilies,
+						implementerAgentId: effectiveAgent,
+					});
+					if (effectivePanel.skipReason === "inherit-empty") {
+						if (isPanelReviewRunStale(card.panelReviewRun, probe.headCommit)) {
+							const skipped = createSkippedPanelReviewRun({
+								recordedAt: timestamp,
+								headCommit: probe.headCommit,
+								note: "No panel seats remained after excluding the implementing family.",
+							});
+							if (stillTracked() && (await persistPanelReviewRun(workspacePath, card.id, skipped))) {
+								boardMutated = true;
+							}
+						}
+					} else if (effectivePanel.skipReason === null) {
+						let panelRun = card.panelReviewRun;
+						if (isPanelReviewRunStale(panelRun, probe.headCommit)) {
+							const pending = createPendingPanelReviewRun({
+								recordedAt: timestamp,
+								headCommit: probe.headCommit,
+							});
+							if (stillTracked() && (await persistPanelReviewRun(workspacePath, card.id, pending))) {
+								boardMutated = true;
+							}
+							try {
+								panelRun = {
+									...(await runPanelReview({
+										workspacePath,
+										taskId: card.id,
+										prompt: card.prompt,
+										baseRef: card.baseRef,
+										families: effectivePanel.families,
+										selection: effectivePanel.mode === "custom" ? "custom" : "inherit",
+										recordedAt: timestamp,
+									})),
+									headCommit: probe.headCommit,
+								};
+							} catch (error) {
+								panelRun = {
+									status: "rejected",
+									verdicts: [],
+									recordedAt: timestamp,
+									headCommit: probe.headCommit,
+									note: `Panel review failed: ${String(error)}`,
+								};
+							}
+							if (stillTracked() && (await persistPanelReviewRun(workspacePath, card.id, panelRun))) {
+								boardMutated = true;
+							}
+						}
+						if (!stillTracked() || !panelReviewAllowsAutoReview({ skipReason: null, run: panelRun })) {
+							continue;
+						}
+					}
+
 					const armed = await armPendingGitAction(
 						workspacePath,
 						card.id,

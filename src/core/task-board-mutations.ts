@@ -85,7 +85,7 @@ function panelReviewPersistFields(input: {
 	const families = clonePanelReviewFamilies(input.families ?? undefined);
 	return {
 		panelReviewMode: "custom",
-		...(families ? { panelReviewFamilies: families } : {}),
+		...(families.length > 0 ? { panelReviewFamilies: families } : {}),
 	};
 }
 

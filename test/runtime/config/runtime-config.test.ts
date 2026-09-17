@@ -364,6 +364,35 @@ describe.sequential("runtime-config auto agent selection", () => {
 		}
 	});
 
+	it("defaults panel review off with all families and persists explicit settings", async () => {
+		const { path: tempHome, cleanup: cleanupHome } = createTempDir("kanban-home-runtime-config-panel-review-");
+		const { path: tempProject, cleanup: cleanupProject } = createTempDir(
+			"kanban-project-runtime-config-panel-review-",
+		);
+
+		try {
+			await withTemporaryEnv({ home: tempHome }, async () => {
+				const loaded = await loadRuntimeConfig(tempProject);
+				expect(loaded.panelReviewEnabled).toBe(false);
+				expect(loaded.panelReviewFamilies).toEqual(["grok", "claude", "gpt", "gemini"]);
+
+				const updated = await updateRuntimeConfig(tempProject, {
+					panelReviewEnabled: true,
+					panelReviewFamilies: ["claude", "gpt"],
+				});
+				expect(updated.panelReviewEnabled).toBe(true);
+				expect(updated.panelReviewFamilies).toEqual(["claude", "gpt"]);
+
+				const reloaded = await loadRuntimeConfig(tempProject);
+				expect(reloaded.panelReviewEnabled).toBe(true);
+				expect(reloaded.panelReviewFamilies).toEqual(["claude", "gpt"]);
+			});
+		} finally {
+			cleanupProject();
+			cleanupHome();
+		}
+	});
+
 	it("preserves worktreeSharedDirectories when shortcuts are saved", async () => {
 		const { path: tempHome, cleanup: cleanupHome } = createTempDir("kanban-home-runtime-config-preserve-shared-");
 		const { path: tempProject, cleanup: cleanupProject } = createTempDir(

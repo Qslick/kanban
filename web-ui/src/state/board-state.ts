@@ -226,16 +226,19 @@ function normalizePanelReviewRun(rawRun: unknown): PanelReviewRun | undefined {
 	if (typeof run.recordedAt !== "number") {
 		return undefined;
 	}
-	if (!Array.isArray(run.families) || !Array.isArray(run.verdicts)) {
+	if (run.families !== undefined && !Array.isArray(run.families)) {
 		return undefined;
 	}
-	const families = sanitizePanelReviewFamilies(run.families);
+	if (!Array.isArray(run.verdicts)) {
+		return undefined;
+	}
+	const families = Array.isArray(run.families) ? sanitizePanelReviewFamilies(run.families) : undefined;
 	const verdicts: PanelReviewRun["verdicts"] = [];
 	for (const rawVerdict of run.verdicts) {
 		if (!rawVerdict || typeof rawVerdict !== "object") {
 			continue;
 		}
-		const verdict = rawVerdict as { family?: unknown; verdict?: unknown };
+		const verdict = rawVerdict as { family?: unknown; verdict?: unknown; note?: unknown };
 		if (!isPanelReviewFamily(verdict.family)) {
 			continue;
 		}
@@ -243,19 +246,26 @@ function normalizePanelReviewRun(rawRun: unknown): PanelReviewRun | undefined {
 			verdict.verdict !== "APPROVE" &&
 			verdict.verdict !== "APPROVE_WITH_CHANGES" &&
 			verdict.verdict !== "REJECT" &&
+			verdict.verdict !== "NEED_INFO" &&
 			verdict.verdict !== "UNAVAILABLE" &&
 			verdict.verdict !== "BENCHED"
 		) {
 			continue;
 		}
-		verdicts.push({ family: verdict.family, verdict: verdict.verdict });
+		verdicts.push({
+			family: verdict.family,
+			verdict: verdict.verdict,
+			...(typeof verdict.note === "string" ? { note: verdict.note } : {}),
+		});
 	}
+	const rawHead = (rawRun as { headCommit?: unknown }).headCommit;
 	return {
 		status: run.status,
-		families,
+		...(families ? { families } : {}),
 		verdicts,
 		recordedAt: run.recordedAt,
 		...(typeof run.reportPath === "string" ? { reportPath: run.reportPath } : {}),
+		...(rawHead === null || typeof rawHead === "string" ? { headCommit: rawHead } : {}),
 	};
 }
 
