@@ -1,14 +1,17 @@
+import { Command } from "commander";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
 	buildTaskAgentSettingsForCreate,
 	buildTaskAgentSettingsForUpdate,
+	formatAgentIdOptionHelp,
 	formatTaskAgentSettings,
+	registerTaskCommand,
 	resolveSettingsFlag,
 	shouldWarnOnExplicitAgentId,
 	warnOnAgentSettingsMechanismGaps,
 } from "../../src/commands/task";
-import type { RuntimeTaskAgentSettings } from "../../src/core/api-contract";
+import { type RuntimeTaskAgentSettings, runtimeAgentIdSchema } from "../../src/core/api-contract";
 
 describe("buildTaskAgentSettingsForCreate", () => {
 	it("returns undefined when no settings fields are provided", () => {
@@ -197,5 +200,39 @@ describe("formatTaskAgentSettings", () => {
 
 	it("emits an empty object when settings are absent", () => {
 		expect(formatTaskAgentSettings(undefined)).toEqual({});
+	});
+});
+
+describe("formatAgentIdOptionHelp", () => {
+	it("lists every schema agent id including grok", () => {
+		const createHelp = formatAgentIdOptionHelp("create");
+		const updateHelp = formatAgentIdOptionHelp("update");
+		expect(createHelp).toContain("grok");
+		expect(updateHelp).toContain("grok");
+		for (const agentId of runtimeAgentIdSchema.options) {
+			expect(createHelp).toContain(agentId);
+			expect(updateHelp).toContain(agentId);
+		}
+		expect(createHelp).toBe(`Agent override: ${runtimeAgentIdSchema.options.join(" | ")} | default.`);
+		expect(updateHelp).toBe(`Agent override: ${runtimeAgentIdSchema.options.join(" | ")}. Use "default" to clear.`);
+	});
+});
+
+describe("registerTaskCommand agent-id help", () => {
+	function getAgentIdOptionDescription(commandName: "create" | "update"): string | undefined {
+		const program = new Command();
+		registerTaskCommand(program);
+		const task = program.commands.find((command) => command.name() === "task");
+		const subcommand = task?.commands.find((command) => command.name() === commandName);
+		return subcommand?.options.find((option) => option.long === "--agent-id")?.description;
+	}
+
+	it("includes grok on task create and task update", () => {
+		const createHelp = getAgentIdOptionDescription("create");
+		const updateHelp = getAgentIdOptionDescription("update");
+		expect(createHelp).toBe(formatAgentIdOptionHelp("create"));
+		expect(updateHelp).toBe(formatAgentIdOptionHelp("update"));
+		expect(createHelp).toContain("grok");
+		expect(updateHelp).toContain("grok");
 	});
 });
