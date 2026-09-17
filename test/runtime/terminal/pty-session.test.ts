@@ -11,7 +11,7 @@ vi.mock("node-pty", () => ({
 	spawn: ptyMocks.spawn,
 }));
 
-import { PtySession } from "../../../src/terminal/pty-session";
+import { PTY_SIGKILL_ESCALATION_MS, PtySession } from "../../../src/terminal/pty-session";
 
 const originalPlatform = process.platform;
 const originalComSpec = process.env.ComSpec;
@@ -299,6 +299,65 @@ describe("PtySession", () => {
 		});
 
 		expect(() => session.write("hello")).not.toThrow();
+	});
+
+	it("SIGTERMs the pty process group then SIGKILLs after the wait", () => {
+		setPlatform("darwin");
+		vi.useFakeTimers();
+		const processKill = vi.spyOn(process, "kill").mockImplementation(() => true);
+		const ptyProcess = createMockPtyProcess();
+		ptyMocks.spawn.mockReturnValue(ptyProcess);
+
+		try {
+			const session = PtySession.spawn({
+				binary: "claude",
+				args: [],
+				cwd: "/tmp",
+				cols: 120,
+				rows: 40,
+			});
+
+			session.stop();
+
+			expect(ptyProcess.kill).toHaveBeenCalledTimes(1);
+			expect(processKill).toHaveBeenCalledWith(-4242, "SIGTERM");
+
+			vi.advanceTimersByTime(PTY_SIGKILL_ESCALATION_MS);
+
+			expect(processKill).toHaveBeenCalledWith(-4242, "SIGKILL");
+			expect(ptyProcess.kill).toHaveBeenCalledWith("SIGKILL");
+		} finally {
+			processKill.mockRestore();
+			vi.useRealTimers();
+		}
+	});
+
+	it("does not schedule a second SIGKILL when stop is called twice", () => {
+		setPlatform("darwin");
+		vi.useFakeTimers();
+		const processKill = vi.spyOn(process, "kill").mockImplementation(() => true);
+		const ptyProcess = createMockPtyProcess();
+		ptyMocks.spawn.mockReturnValue(ptyProcess);
+
+		try {
+			const session = PtySession.spawn({
+				binary: "claude",
+				args: [],
+				cwd: "/tmp",
+				cols: 120,
+				rows: 40,
+			});
+
+			session.stop();
+			session.stop({ interrupted: true });
+
+			expect(processKill).toHaveBeenCalledTimes(1);
+			vi.advanceTimersByTime(PTY_SIGKILL_ESCALATION_MS);
+			expect(processKill.mock.calls.filter((call) => call[1] === "SIGKILL")).toHaveLength(1);
+		} finally {
+			processKill.mockRestore();
+			vi.useRealTimers();
+		}
 	});
 
 	it("rethrows non-ignorable write errors", () => {

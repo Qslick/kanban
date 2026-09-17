@@ -211,6 +211,7 @@ function hasCodexStartupUiRendered(text: string): boolean {
 export class TerminalSessionManager implements TerminalSessionService {
 	private readonly entries = new Map<string, SessionEntry>();
 	private readonly summaryListeners = new Set<(summary: RuntimeTaskSessionSummary) => void>();
+	private disposed = false;
 
 	private trySendDeferredCodexStartupInput(taskId: string): boolean {
 		const entry = this.entries.get(taskId);
@@ -249,6 +250,9 @@ export class TerminalSessionManager implements TerminalSessionService {
 	}
 
 	hydrateFromRecord(record: Record<string, RuntimeTaskSessionSummary>): void {
+		if (this.disposed) {
+			return;
+		}
 		for (const [taskId, summary] of Object.entries(record)) {
 			this.entries.set(taskId, {
 				summary: cloneSummary(summary),
@@ -275,6 +279,9 @@ export class TerminalSessionManager implements TerminalSessionService {
 	}
 
 	attach(taskId: string, listener: TerminalSessionListener): (() => void) | null {
+		if (this.disposed) {
+			return null;
+		}
 		const entry = this.ensureEntry(taskId);
 
 		listener.onState?.(cloneSummary(entry.summary));
@@ -304,6 +311,9 @@ export class TerminalSessionManager implements TerminalSessionService {
 	}
 
 	async startTaskSession(request: StartTaskSessionRequest): Promise<RuntimeTaskSessionSummary> {
+		if (this.disposed) {
+			throw new Error("Terminal session manager has been disposed.");
+		}
 		const entry = this.ensureEntry(request.taskId);
 		entry.restartRequest = {
 			kind: "task",
@@ -314,8 +324,7 @@ export class TerminalSessionManager implements TerminalSessionService {
 		}
 
 		if (entry.active) {
-			stopWorkspaceTrustTimers(entry.active);
-			entry.active.session.stop();
+			this.teardownActiveProcess(entry);
 			entry.active = null;
 		}
 		entry.terminalStateMirror?.dispose();
@@ -574,6 +583,9 @@ export class TerminalSessionManager implements TerminalSessionService {
 	}
 
 	async startShellSession(request: StartShellSessionRequest): Promise<RuntimeTaskSessionSummary> {
+		if (this.disposed) {
+			throw new Error("Terminal session manager has been disposed.");
+		}
 		const entry = this.ensureEntry(request.taskId);
 		entry.restartRequest = {
 			kind: "shell",
@@ -584,8 +596,7 @@ export class TerminalSessionManager implements TerminalSessionService {
 		}
 
 		if (entry.active) {
-			stopWorkspaceTrustTimers(entry.active);
-			entry.active.session.stop();
+			this.teardownActiveProcess(entry);
 			entry.active = null;
 		}
 		entry.terminalStateMirror?.dispose();
@@ -942,29 +953,47 @@ export class TerminalSessionManager implements TerminalSessionService {
 		if (!entry?.active) {
 			return entry ? cloneSummary(entry.summary) : null;
 		}
-		entry.suppressAutoRestartOnExit = true;
-		const cleanupFn = entry.active.onSessionCleanup;
-		entry.active.onSessionCleanup = null;
-		stopWorkspaceTrustTimers(entry.active);
-		entry.active.session.stop();
-		if (cleanupFn) {
-			cleanupFn().catch(() => {
-				// Best effort: cleanup failure is non-critical.
-			});
-		}
+		this.teardownActiveProcess(entry);
 		return cloneSummary(entry.summary);
 	}
 
 	markInterruptedAndStopAll(): RuntimeTaskSessionSummary[] {
 		const activeEntries = Array.from(this.entries.values()).filter((entry) => entry.active != null);
 		for (const entry of activeEntries) {
-			if (!entry.active) {
-				continue;
-			}
-			stopWorkspaceTrustTimers(entry.active);
-			entry.active.session.stop({ interrupted: true });
+			this.teardownActiveProcess(entry, { interrupted: true });
 		}
 		return activeEntries.map((entry) => cloneSummary(entry.summary));
+	}
+
+	dispose(): void {
+		this.disposed = true;
+		this.markInterruptedAndStopAll();
+		for (const entry of this.entries.values()) {
+			entry.listeners.clear();
+			entry.restartRequest = null;
+			entry.pendingAutoRestart = null;
+			entry.terminalStateMirror?.dispose();
+			entry.terminalStateMirror = null;
+		}
+		this.entries.clear();
+		this.summaryListeners.clear();
+	}
+
+	private teardownActiveProcess(entry: SessionEntry, options?: { interrupted?: boolean }): void {
+		const active = entry.active;
+		if (!active) {
+			return;
+		}
+		entry.suppressAutoRestartOnExit = true;
+		const cleanupFn = active.onSessionCleanup;
+		active.onSessionCleanup = null;
+		stopWorkspaceTrustTimers(active);
+		active.session.stop(options?.interrupted ? { interrupted: true } : undefined);
+		if (cleanupFn) {
+			cleanupFn().catch(() => {
+				// Best effort: cleanup failure is non-critical.
+			});
+		}
 	}
 
 	private applySessionEvent(entry: SessionEntry, event: SessionTransitionEvent): RuntimeTaskSessionSummary {
@@ -984,6 +1013,9 @@ export class TerminalSessionManager implements TerminalSessionService {
 	}
 
 	private ensureEntry(taskId: string): SessionEntry {
+		if (this.disposed) {
+			throw new Error("Terminal session manager has been disposed.");
+		}
 		const existing = this.entries.get(taskId);
 		if (existing) {
 			return existing;
@@ -1025,7 +1057,7 @@ export class TerminalSessionManager implements TerminalSessionService {
 	}
 
 	private scheduleAutoRestart(entry: SessionEntry): void {
-		if (entry.pendingAutoRestart) {
+		if (this.disposed || entry.pendingAutoRestart) {
 			return;
 		}
 		const restartRequest = entry.restartRequest;
@@ -1035,6 +1067,9 @@ export class TerminalSessionManager implements TerminalSessionService {
 		let pendingAutoRestart: Promise<void> | null = null;
 		pendingAutoRestart = (async () => {
 			try {
+				if (this.disposed) {
+					return;
+				}
 				await this.startTaskSession(cloneStartTaskSessionRequest(restartRequest.request));
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);

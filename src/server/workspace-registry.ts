@@ -269,13 +269,13 @@ export async function createWorkspaceRegistry(deps: CreateWorkspaceRegistryDepen
 
 	const disposeWorkspace = (
 		workspaceId: string,
-		options?: DisposeWorkspaceRegistryOptions,
+		_options?: DisposeWorkspaceRegistryOptions,
 	): { terminalManager: TerminalSessionManager | null; workspacePath: string | null } => {
 		const terminalManager = getTerminalManagerForWorkspace(workspaceId);
 		if (terminalManager) {
-			if (options?.stopTerminalSessions !== false) {
-				terminalManager.markInterruptedAndStopAll();
-			}
+			// Always tear down PTY trees. Dropping a manager without dispose leaks
+			// agent children; `stopTerminalSessions: false` is treated the same.
+			terminalManager.dispose();
 			terminalManagersByWorkspaceId.delete(workspaceId);
 			terminalManagerLoadPromises.delete(workspaceId);
 		}

@@ -161,11 +161,6 @@ function collectWorkColumnTaskIds(workspaceState: RuntimeWorkspaceStateResponse)
 }
 
 export async function shutdownRuntimeServer(deps: RuntimeShutdownCoordinatorDependencies): Promise<void> {
-	if (deps.skipSessionCleanup) {
-		await deps.closeRuntimeServer();
-		return;
-	}
-
 	const interruptedByWorkspace: Array<{
 		workspacePath: string;
 		interruptedTaskIds: string[];
@@ -176,11 +171,14 @@ export async function shutdownRuntimeServer(deps: RuntimeShutdownCoordinatorDepe
 
 	for (const { workspacePath, terminalManager } of deps.workspaceRegistry.listManagedWorkspaces()) {
 		const interrupted = terminalManager.markInterruptedAndStopAll();
-		const interruptedTaskIds = new Set(collectShutdownInterruptedTaskIds(interrupted, terminalManager));
 		if (!workspacePath) {
 			continue;
 		}
 		managedWorkspacePaths.add(workspacePath);
+		if (deps.skipSessionCleanup) {
+			continue;
+		}
+		const interruptedTaskIds = new Set(collectShutdownInterruptedTaskIds(interrupted, terminalManager));
 		try {
 			const workspaceState = await loadWorkspaceState(workspacePath);
 			for (const taskId of collectWorkColumnTaskIds(workspaceState)) {
@@ -196,6 +194,12 @@ export async function shutdownRuntimeServer(deps: RuntimeShutdownCoordinatorDepe
 			const message = error instanceof Error ? error.message : String(error);
 			deps.warn(`Could not load workspace state for ${workspacePath} during shutdown cleanup. ${message}`);
 		}
+	}
+
+	if (deps.skipSessionCleanup) {
+		await deps.closeRuntimeServer();
+		await cleanupTaskWorktreeSetupLocks(managedWorkspacePaths, deps.warn);
+		return;
 	}
 
 	const indexedWorkspaces = await listWorkspaceIndexEntries();
