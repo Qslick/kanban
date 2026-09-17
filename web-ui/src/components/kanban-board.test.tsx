@@ -290,6 +290,7 @@ describe("KanbanBoard", () => {
 					onCardSelect={() => {}}
 					onCreateTask={() => {}}
 					dependencies={board.dependencies}
+					workspacePath="/tmp/project-a"
 					onDragEnd={() => {}}
 				/>,
 			);
@@ -306,7 +307,9 @@ describe("KanbanBoard", () => {
 		});
 
 		expect(toggle?.getAttribute("aria-pressed")).toBe("true");
-		expect(window.localStorage.getItem(LocalStorageKey.ReadyNowFilter)).toBe("true");
+		// The filter is scoped per workspace so enabling it on one project cannot hide cards on another.
+		expect(window.localStorage.getItem(`${LocalStorageKey.ReadyNowFilter}./tmp/project-a`)).toBe("true");
+		expect(window.localStorage.getItem(LocalStorageKey.ReadyNowFilter)).toBeNull();
 		expect(container.querySelector('[data-task-id="ready-task"]')).not.toBeNull();
 		expect(container.querySelector('[data-task-id="blocked-task"]')).toBeNull();
 	});

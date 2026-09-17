@@ -87,7 +87,11 @@ describe("BoardColumn ready now filter", () => {
 		}
 	});
 
-	async function renderBacklog(board: BoardData, readyNowFilter: boolean): Promise<void> {
+	async function renderBacklog(
+		board: BoardData,
+		readyNowFilter: boolean,
+		overrides?: { onToggleReadyNowFilter?: () => void; editingTaskId?: string; inlineTaskEditor?: ReactNode },
+	): Promise<void> {
 		const backlog = board.columns[0];
 		if (!backlog) {
 			throw new Error("Expected a backlog column");
@@ -101,12 +105,20 @@ describe("BoardColumn ready now filter", () => {
 						onCreateTask={() => {}}
 						onStartAllTasks={() => {}}
 						readyNowFilter={readyNowFilter}
-						onToggleReadyNowFilter={() => {}}
+						onToggleReadyNowFilter={overrides?.onToggleReadyNowFilter ?? (() => {})}
 						isCardReadyNow={(taskId) => isTaskReadyNow(board, taskId)}
+						editingTaskId={overrides?.editingTaskId ?? null}
+						inlineTaskEditor={overrides?.inlineTaskEditor}
 					/>
 				</TooltipProvider>,
 			);
 		});
+	}
+
+	function findShowAllButton(): HTMLButtonElement | undefined {
+		return Array.from(container.querySelectorAll("button")).find(
+			(button) => button.textContent?.trim() === "Show all",
+		);
 	}
 
 	it("shows every backlog card when the filter is off", async () => {
@@ -206,5 +218,86 @@ describe("BoardColumn ready now filter", () => {
 
 		expect(container.querySelector('[data-task-id="blocked"]')).toBeNull();
 		expect(container.textContent).toContain("No ready cards");
+	});
+
+	it("keeps the real card total in the count badge while cards are hidden", async () => {
+		const ready = createCard("ready", "Ready task");
+		const blocked = createCard("blocked", "Blocked task");
+		const board = createBoard({
+			backlogCards: [ready, blocked],
+			reviewCards: [createCard("prereq")],
+			dependencies: [{ id: "dep-1", fromTaskId: "blocked", toTaskId: "prereq", createdAt: 1 }],
+		});
+
+		await renderBacklog(board, false);
+		expect(container.textContent).toContain("2");
+		expect(container.textContent).not.toContain("blocked cards hidden");
+
+		// A badge that only counts visible cards makes a hidden card indistinguishable from a
+		// deleted one, which is what made dependency-linked cards look like they vanished.
+		await renderBacklog(board, true);
+		expect(container.textContent).toContain("1 / 2");
+	});
+
+	it("offers a way back to the hidden cards while some cards are still visible", async () => {
+		const toggle = vi.fn();
+		const ready = createCard("ready", "Ready task");
+		const blocked = createCard("blocked", "Blocked task");
+		const board = createBoard({
+			backlogCards: [ready, blocked],
+			reviewCards: [createCard("prereq")],
+			dependencies: [{ id: "dep-1", fromTaskId: "blocked", toTaskId: "prereq", createdAt: 1 }],
+		});
+
+		await renderBacklog(board, true, { onToggleReadyNowFilter: toggle });
+
+		expect(container.textContent).toContain("1 blocked card hidden");
+		const showAll = findShowAllButton();
+		expect(showAll).not.toBeUndefined();
+		await act(async () => {
+			showAll?.click();
+		});
+		expect(toggle).toHaveBeenCalledTimes(1);
+	});
+
+	it("names the hidden cards and offers a way back when nothing is ready", async () => {
+		const toggle = vi.fn();
+		const blocked = createCard("blocked", "Blocked task");
+		const alsoBlocked = createCard("also-blocked", "Also blocked task");
+		const board = createBoard({
+			backlogCards: [blocked, alsoBlocked],
+			reviewCards: [createCard("prereq")],
+			dependencies: [
+				{ id: "dep-1", fromTaskId: "blocked", toTaskId: "prereq", createdAt: 1 },
+				{ id: "dep-2", fromTaskId: "also-blocked", toTaskId: "prereq", createdAt: 2 },
+			],
+		});
+
+		await renderBacklog(board, true, { onToggleReadyNowFilter: toggle });
+
+		expect(container.textContent).toContain("2 blocked cards hidden");
+		await act(async () => {
+			findShowAllButton()?.click();
+		});
+		expect(toggle).toHaveBeenCalledTimes(1);
+	});
+
+	it("keeps the card being edited visible even when it is blocked", async () => {
+		const blocked = createCard("blocked", "Blocked task");
+		const board = createBoard({
+			backlogCards: [blocked],
+			reviewCards: [createCard("prereq")],
+			dependencies: [{ id: "dep-1", fromTaskId: "blocked", toTaskId: "prereq", createdAt: 1 }],
+		});
+
+		// The inline editor is rendered from the filtered list, so hiding the edited card would
+		// make "edit task" a silent no-op.
+		await renderBacklog(board, true, {
+			editingTaskId: "blocked",
+			inlineTaskEditor: <div data-testid="inline-editor" />,
+		});
+
+		expect(container.querySelector('[data-task-id="blocked"]')).not.toBeNull();
+		expect(container.querySelector('[data-testid="inline-editor"]')).not.toBeNull();
 	});
 });

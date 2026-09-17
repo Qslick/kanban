@@ -102,8 +102,15 @@ export function BoardColumn({
 	const canStartAllTasks = column.id === "backlog" && onStartAllTasks;
 	const canClearTrash = column.id === "trash" && onClearTrash;
 	const canToggleReadyNow = column.id === "backlog" && Boolean(onToggleReadyNowFilter);
+	const isFiltering = Boolean(readyNowFilter) && Boolean(isCardReadyNow);
+	// The card being edited stays visible even when it is blocked: the inline editor is rendered
+	// from this list, so filtering it out would turn "edit task" into a silent no-op.
 	const visibleCards =
-		readyNowFilter && isCardReadyNow ? column.cards.filter((card) => isCardReadyNow(card.id)) : column.cards;
+		readyNowFilter && isCardReadyNow
+			? column.cards.filter((card) => isCardReadyNow(card.id) || card.id === editingTaskId)
+			: column.cards;
+	const hiddenCardCount = column.cards.length - visibleCards.length;
+	const hiddenCardLabel = `${hiddenCardCount} blocked ${hiddenCardCount === 1 ? "card" : "cards"} hidden`;
 	const cardDropType = "CARD";
 	const isDropDisabled =
 		isCardDropDisabled(column.id, activeDragSourceColumnId ?? null, {
@@ -147,7 +154,7 @@ export function BoardColumn({
 							{column.title}
 						</span>
 						<span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-semibold tabular-nums bg-surface-3/80 text-text-secondary border border-border/60">
-							{visibleCards.length}
+							{hiddenCardCount > 0 ? `${visibleCards.length} / ${column.cards.length}` : column.cards.length}
 						</span>
 						{column.id === "review" && panelReviewEnabled ? (
 							<Tooltip side="bottom" content="Panel review is enabled for this workspace">
@@ -159,7 +166,10 @@ export function BoardColumn({
 					</div>
 					<div className="flex items-center gap-1 shrink-0">
 						{canToggleReadyNow ? (
-							<Tooltip side="bottom" content="Show cards with no unfinished prerequisites">
+							<Tooltip
+								side="bottom"
+								content="Show only cards with no unfinished prerequisites. Blocked cards stay on the board, and reordering Backlog is unavailable while this is on."
+							>
 								<Button
 									variant={readyNowFilter ? "primary" : "ghost"}
 									size="sm"
@@ -224,9 +234,21 @@ export function BoardColumn({
 								</Button>
 							) : null}
 
-							{readyNowFilter && visibleCards.length === 0 ? (
-								<div className="kb-column-empty flex flex-1 flex-col items-center justify-center p-4 text-center rounded-lg border border-dashed border-border/60 text-text-tertiary my-2">
-									<p className="text-xs text-text-tertiary m-0">No ready cards</p>
+							{isFiltering && visibleCards.length === 0 ? (
+								<div className="kb-column-empty relative z-10 flex flex-1 flex-col items-center justify-center gap-1.5 p-4 text-center rounded-lg border border-dashed border-border/60 text-text-tertiary my-2">
+									<p className="text-xs text-text-tertiary m-0">
+										{hiddenCardCount > 0 ? `No ready cards — ${hiddenCardLabel}` : "No ready cards"}
+									</p>
+									{hiddenCardCount > 0 ? (
+										<Button
+											variant="ghost"
+											size="sm"
+											onClick={onToggleReadyNowFilter}
+											className="h-7 px-2 text-text-secondary hover:text-text-primary"
+										>
+											Show all
+										</Button>
+									) : null}
 								</div>
 							) : null}
 							{!readyNowFilter && column.cards.length === 0 && !canCreate ? (
@@ -294,6 +316,19 @@ export function BoardColumn({
 								return items;
 							})()}
 							{cardProvided.placeholder}
+							{isFiltering && hiddenCardCount > 0 && visibleCards.length > 0 ? (
+								<div className="relative z-10 shrink-0 flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg border border-dashed border-border/60 bg-surface-1">
+									<span className="text-xs text-text-tertiary truncate">{hiddenCardLabel}</span>
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={onToggleReadyNowFilter}
+										className="h-6 px-2 shrink-0 text-text-secondary hover:text-text-primary"
+									>
+										Show all
+									</Button>
+								</div>
+							) : null}
 						</div>
 					)}
 				</Droppable>

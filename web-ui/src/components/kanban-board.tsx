@@ -97,7 +97,10 @@ export function KanbanBoard({
 	const latestDataRef = useRef<BoardData>(data);
 	const programmaticCardMoveInFlightRef = useRef<ProgrammaticCardMoveInFlight | null>(null);
 	const [activeDragTaskId, setActiveDragTaskId] = useState<string | null>(null);
-	const [readyNowFilter, setReadyNowFilter] = useBooleanLocalStorageValue(LocalStorageKey.ReadyNowFilter, false);
+	// Scope the filter per workspace: a global key means toggling it on one project silently
+	// hides blocked cards on every other project.
+	const readyNowFilterStorageKey = `${LocalStorageKey.ReadyNowFilter}.${workspacePath ?? "default"}`;
+	const [readyNowFilter, setReadyNowFilter] = useBooleanLocalStorageValue(readyNowFilterStorageKey, false);
 
 	const [activeDragSourceColumnId, setActiveDragSourceColumnId] = useState<BoardColumnId | null>(null);
 	const [programmaticCardMoveInFlight, setProgrammaticCardMoveInFlight] =
