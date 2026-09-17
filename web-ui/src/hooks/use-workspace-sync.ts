@@ -110,6 +110,14 @@ export function useWorkspaceSync({
 			setWorkspaceGit(nextWorkspaceState.git);
 			setSessions((currentSessions) => {
 				const incomingSessions = nextWorkspaceState.sessions ?? {};
+				// Merging only makes sense within one project, where it preserves local session
+				// updates that have not round-tripped yet. Across a project switch it carried the
+				// previous project's session records into this project's state, and the next
+				// debounced save persisted them into this workspace's sessions.json — which is how
+				// boards accumulated hundreds of records for tasks they never had.
+				if (!isSameProject) {
+					return { ...incomingSessions };
+				}
 				return mergeTaskSessionSummaries(currentSessions, incomingSessions);
 			});
 			const shouldHydrateBoard = !isSameProject || currentRevision !== nextWorkspaceState.revision;
