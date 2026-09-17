@@ -1060,6 +1060,38 @@ describe("per-task agentSettings overrides", () => {
 		expect(launch.args[effortIndex + 1]).toBe(SENTINEL.reasoningEffort);
 	});
 
+	it("grok: card model/effort do not inherit Claude's default model", async () => {
+		setupTempHome();
+		const claudeDefaultModel = "claude-sonnet-4-6";
+		const grokModel = "grok-code-fast-1";
+		const grokEffort = "high";
+
+		const grokLaunch = await prepareAgentLaunch({
+			taskId: "task-grok-card",
+			agentId: "grok",
+			binary: "grok",
+			args: [],
+			cwd: "/tmp",
+			prompt: "",
+			agentSettings: { modelId: grokModel, reasoningEffort: grokEffort },
+		});
+		const claudeLaunch = await prepareAgentLaunch({
+			taskId: "task-claude-default",
+			agentId: "claude",
+			binary: "claude",
+			args: [],
+			cwd: "/tmp",
+			prompt: "",
+			agentSettings: { modelId: claudeDefaultModel, reasoningEffort: "high" },
+		});
+
+		expect(grokLaunch.args[grokLaunch.args.indexOf("--model") + 1]).toBe(grokModel);
+		expect(grokLaunch.args[grokLaunch.args.indexOf("--reasoning-effort") + 1]).toBe(grokEffort);
+		expect(grokLaunch.args).not.toContain(claudeDefaultModel);
+		expect(claudeLaunch.args[claudeLaunch.args.indexOf("--model") + 1]).toBe(claudeDefaultModel);
+		expect(claudeLaunch.args).not.toContain(grokModel);
+	});
+
 	it("grok: keeps existing --model or --effort flags and does not duplicate", async () => {
 		setupTempHome();
 		const launch = await prepareAgentLaunch({

@@ -84,6 +84,14 @@ function parseAutoReviewMode(value: string | undefined): "commit" | "pr" | undef
 
 const VALID_AGENT_IDS = runtimeAgentIdSchema.options;
 
+export function formatAgentIdOptionHelp(kind: "create" | "update"): string {
+	const ids = VALID_AGENT_IDS.join(" | ");
+	if (kind === "create") {
+		return `Agent override: ${ids} | default.`;
+	}
+	return `Agent override: ${ids}. Use "default" to clear.`;
+}
+
 function parseAgentId(value: string | undefined): RuntimeAgentId | null | undefined {
 	if (value === undefined) {
 		return undefined;
@@ -1178,7 +1186,7 @@ export function registerTaskCommand(program: Command): void {
 		.option("--start-in-plan-mode [value]", "Set plan mode (true|false). Flag-only implies true.")
 		.option("--auto-review-enabled [value]", "Enable auto-review behavior (true|false). Flag-only implies true.")
 		.option("--auto-review-mode <mode>", "Auto-review mode: commit | pr.", parseAutoReviewMode)
-		.option("--agent-id <id>", "Agent override: cline | claude | codex | droid | gemini | opencode | kiro | default.")
+		.option("--agent-id <id>", formatAgentIdOptionHelp("create"))
 		.option("--provider <id>", "Provider override for the task's agent. Valid values depend on the agent.")
 		.option("--model <id>", "Model override for the task's agent. Valid values depend on the agent.")
 		.option("--effort <level>", "Reasoning effort override for the task's agent. Valid values depend on the agent.")
@@ -1253,10 +1261,7 @@ export function registerTaskCommand(program: Command): void {
 		.option("--start-in-plan-mode [value]", "Set plan mode (true|false). Flag-only implies true.")
 		.option("--auto-review-enabled [value]", "Enable auto-review behavior (true|false). Flag-only implies true.")
 		.option("--auto-review-mode <mode>", "Auto-review mode: commit | pr.", parseAutoReviewMode)
-		.option(
-			"--agent-id <id>",
-			'Agent override: cline | claude | codex | droid | gemini | opencode | kiro. Use "default" to clear.',
-		)
+		.option("--agent-id <id>", formatAgentIdOptionHelp("update"))
 		.option(
 			"--provider <id>",
 			'Provider override for the task\'s agent. Use "default" to clear. Valid values depend on the agent.',
