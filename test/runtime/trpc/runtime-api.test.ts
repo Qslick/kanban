@@ -189,6 +189,8 @@ function createRuntimeConfigState(): RuntimeConfigState {
 		openPrPromptTemplate: "pr",
 		commitPromptTemplateDefault: "commit",
 		openPrPromptTemplateDefault: "pr",
+		panelReviewEnabled: false,
+		panelReviewFamilies: ["grok", "claude", "gpt", "gemini"],
 		globalConfigPath: "/tmp/global-config.json",
 		projectConfigPath: "/tmp/project-config.json",
 	};

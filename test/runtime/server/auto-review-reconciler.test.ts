@@ -8,12 +8,19 @@ import type {
 	RuntimeTaskSessionSummary,
 	RuntimeWorkspaceStateResponse,
 } from "../../../src/core/api-contract";
+import type { PanelReviewConfig, PanelReviewRun } from "../../../src/core/panel-review";
+import {
+	DEFAULT_PANEL_REVIEW_CONFIG,
+	DEFAULT_PANEL_REVIEW_FAMILIES,
+	summarizePanelReviewRun,
+} from "../../../src/core/panel-review";
 import type {
 	AutoReviewTaskProbe,
 	CreateAutoReviewReconcilerDependencies,
 	TaskGitPromptTemplates,
 } from "../../../src/server/auto-review-reconciler";
 import { createAutoReviewReconciler } from "../../../src/server/auto-review-reconciler";
+import type { DispatchPanelSeats, RunPanelReviewInput } from "../../../src/server/panel-review-runner";
 import type { TerminalSessionManager } from "../../../src/terminal/session-manager";
 
 interface StoredWorkspaceState {
@@ -134,6 +141,9 @@ interface HarnessOptions {
 	clineService?: ClineTaskSessionService;
 	promptTemplates?: TaskGitPromptTemplates;
 	now?: () => number;
+	panelReviewConfig?: PanelReviewConfig;
+	dispatchPanelSeats?: DispatchPanelSeats;
+	runPanelReview?: (input: RunPanelReviewInput) => Promise<PanelReviewRun>;
 }
 
 function createHarness(options: HarnessOptions) {
@@ -171,6 +181,9 @@ function createHarness(options: HarnessOptions) {
 			},
 		getSelectedAgentId: async () => options.selectedAgentId ?? null,
 		getClineTaskSessionService: () => options.clineService ?? null,
+		getPanelReviewConfig: async () => options.panelReviewConfig ?? DEFAULT_PANEL_REVIEW_CONFIG,
+		...(options.dispatchPanelSeats ? { dispatchPanelSeats: options.dispatchPanelSeats } : {}),
+		...(options.runPanelReview ? { runPanelReview: options.runPanelReview } : {}),
 		probeTaskWorkspace,
 		onBoardMutated,
 		...(options.now ? { now: options.now } : {}),
@@ -489,6 +502,233 @@ describe("auto-review reconciler", () => {
 		const result = findCardInBoard(harness.store.stored.board, "task-1");
 		expect(result?.columnId).toBe("review");
 		expect(result?.card.pendingGitAction ?? null).toBeNull();
+		expect(harness.terminal.writeInput).not.toHaveBeenCalled();
+	});
+
+	it("auto-reviews when panel review is off", async () => {
+		const runPanelReview = vi.fn(async () => {
+			await Promise.resolve();
+			return summarizePanelReviewRun({
+				verdicts: [{ family: "gpt", verdict: "REJECT" }],
+				recordedAt: 1,
+				headCommit: "commit-1",
+				selection: "inherit",
+			});
+		});
+		const card = createCard({ id: "task-1", autoReviewEnabled: true });
+		const harness = createHarness({
+			board: createBoard({ review: [card] }),
+			panelReviewConfig: DEFAULT_PANEL_REVIEW_CONFIG,
+			runPanelReview,
+		});
+		harness.setProbe("task-1", { exists: true, headCommit: "commit-1", changedFiles: 3 });
+
+		await harness.evaluate();
+
+		expect(runPanelReview).not.toHaveBeenCalled();
+		expect(findCardInBoard(harness.store.stored.board, "task-1")?.card.pendingGitAction).not.toBeNull();
+		expect(harness.terminal.writeInput).toHaveBeenCalled();
+	});
+
+	it("blocks auto-review when a panel seat rejects", async () => {
+		const card = createCard({ id: "task-1", autoReviewEnabled: true });
+		const harness = createHarness({
+			board: createBoard({ review: [card] }),
+			selectedAgentId: "codex",
+			panelReviewConfig: { panelReviewEnabled: true, panelReviewFamilies: DEFAULT_PANEL_REVIEW_FAMILIES },
+			runPanelReview: async (input) =>
+				summarizePanelReviewRun({
+					verdicts: [{ family: "claude", verdict: "REJECT" }],
+					recordedAt: input.recordedAt,
+					headCommit: "commit-1",
+					selection: input.selection,
+				}),
+		});
+		harness.setProbe("task-1", { exists: true, headCommit: "commit-1", changedFiles: 3 });
+
+		await harness.evaluate();
+
+		const result = findCardInBoard(harness.store.stored.board, "task-1");
+		expect(result?.columnId).toBe("review");
+		expect(result?.card.pendingGitAction ?? null).toBeNull();
+		expect(result?.card.panelReviewRun?.status).toBe("rejected");
+		expect(harness.terminal.writeInput).not.toHaveBeenCalled();
+	});
+
+	it("blocks auto-review when panel seats split", async () => {
+		const card = createCard({ id: "task-1", autoReviewEnabled: true });
+		const harness = createHarness({
+			board: createBoard({ review: [card] }),
+			selectedAgentId: "codex",
+			panelReviewConfig: { panelReviewEnabled: true, panelReviewFamilies: DEFAULT_PANEL_REVIEW_FAMILIES },
+			runPanelReview: async (input) =>
+				summarizePanelReviewRun({
+					verdicts: [
+						{ family: "claude", verdict: "APPROVE" },
+						{ family: "gemini", verdict: "REJECT" },
+					],
+					recordedAt: input.recordedAt,
+					headCommit: "commit-1",
+					selection: input.selection,
+				}),
+		});
+		harness.setProbe("task-1", { exists: true, headCommit: "commit-1", changedFiles: 3 });
+
+		await harness.evaluate();
+
+		const result = findCardInBoard(harness.store.stored.board, "task-1");
+		expect(result?.columnId).toBe("review");
+		expect(result?.card.pendingGitAction ?? null).toBeNull();
+		expect(result?.card.panelReviewRun?.status).toBe("split");
+		expect(harness.terminal.writeInput).not.toHaveBeenCalled();
+	});
+
+	it("proceeds with auto-review when every available seat approves", async () => {
+		const card = createCard({ id: "task-1", autoReviewEnabled: true });
+		const harness = createHarness({
+			board: createBoard({ review: [card] }),
+			selectedAgentId: "codex",
+			panelReviewConfig: { panelReviewEnabled: true, panelReviewFamilies: DEFAULT_PANEL_REVIEW_FAMILIES },
+			runPanelReview: async (input) =>
+				summarizePanelReviewRun({
+					verdicts: [
+						{ family: "grok", verdict: "APPROVE" },
+						{ family: "claude", verdict: "APPROVE_WITH_CHANGES" },
+						{ family: "gemini", verdict: "APPROVE" },
+					],
+					recordedAt: input.recordedAt,
+					headCommit: "commit-1",
+					selection: input.selection,
+				}),
+		});
+		harness.setProbe("task-1", { exists: true, headCommit: "commit-1", changedFiles: 3 });
+
+		await harness.evaluate();
+
+		const result = findCardInBoard(harness.store.stored.board, "task-1");
+		expect(result?.card.pendingGitAction).not.toBeNull();
+		expect(result?.card.panelReviewRun?.status).toBe("passed");
+		expect(harness.terminal.writeInput).toHaveBeenCalled();
+	});
+
+	it("re-runs a stale panel when HEAD changes", async () => {
+		const runPanelReview = vi.fn(async (input: RunPanelReviewInput) => {
+			await Promise.resolve();
+			return summarizePanelReviewRun({
+				verdicts: [{ family: "claude", verdict: "REJECT" }],
+				recordedAt: input.recordedAt,
+				headCommit: "commit-2",
+				selection: input.selection,
+			});
+		});
+		const card = createCard({
+			id: "task-1",
+			autoReviewEnabled: true,
+			panelReviewRun: {
+				status: "passed",
+				verdicts: [{ family: "claude", verdict: "APPROVE" }],
+				recordedAt: 1,
+				headCommit: "commit-1",
+			},
+		});
+		const harness = createHarness({
+			board: createBoard({ review: [card] }),
+			selectedAgentId: "codex",
+			panelReviewConfig: { panelReviewEnabled: true, panelReviewFamilies: DEFAULT_PANEL_REVIEW_FAMILIES },
+			runPanelReview,
+		});
+		harness.setProbe("task-1", { exists: true, headCommit: "commit-2", changedFiles: 3 });
+
+		await harness.evaluate();
+
+		expect(runPanelReview).toHaveBeenCalledTimes(1);
+		const result = findCardInBoard(harness.store.stored.board, "task-1");
+		expect(result?.card.panelReviewRun?.status).toBe("rejected");
+		expect(result?.card.panelReviewRun?.headCommit).toBe("commit-2");
+		expect(result?.card.pendingGitAction ?? null).toBeNull();
+		expect(harness.terminal.writeInput).not.toHaveBeenCalled();
+	});
+
+	it("does not re-run a current passed panel", async () => {
+		const runPanelReview = vi.fn(async (input: RunPanelReviewInput) => {
+			await Promise.resolve();
+			return summarizePanelReviewRun({
+				verdicts: [{ family: "claude", verdict: "REJECT" }],
+				recordedAt: input.recordedAt,
+				headCommit: "commit-1",
+				selection: input.selection,
+			});
+		});
+		const card = createCard({
+			id: "task-1",
+			autoReviewEnabled: true,
+			panelReviewRun: {
+				status: "passed",
+				verdicts: [{ family: "claude", verdict: "APPROVE" }],
+				recordedAt: 1,
+				headCommit: "commit-1",
+			},
+		});
+		const harness = createHarness({
+			board: createBoard({ review: [card] }),
+			selectedAgentId: "codex",
+			panelReviewConfig: { panelReviewEnabled: true, panelReviewFamilies: DEFAULT_PANEL_REVIEW_FAMILIES },
+			runPanelReview,
+		});
+		harness.setProbe("task-1", { exists: true, headCommit: "commit-1", changedFiles: 3 });
+
+		await harness.evaluate();
+
+		expect(runPanelReview).not.toHaveBeenCalled();
+		expect(findCardInBoard(harness.store.stored.board, "task-1")?.card.pendingGitAction).not.toBeNull();
+	});
+
+	it("skips inherit-empty panels and still auto-reviews", async () => {
+		const runPanelReview = vi.fn();
+		const card = createCard({ id: "task-1", autoReviewEnabled: true });
+		const harness = createHarness({
+			board: createBoard({ review: [card] }),
+			selectedAgentId: "codex",
+			panelReviewConfig: { panelReviewEnabled: true, panelReviewFamilies: ["gpt"] },
+			runPanelReview,
+		});
+		harness.setProbe("task-1", { exists: true, headCommit: "commit-1", changedFiles: 3 });
+
+		await harness.evaluate();
+
+		expect(runPanelReview).not.toHaveBeenCalled();
+		const result = findCardInBoard(harness.store.stored.board, "task-1");
+		expect(result?.card.panelReviewRun?.status).toBe("skipped");
+		expect(result?.card.pendingGitAction).not.toBeNull();
+	});
+
+	it("parks a custom panel when every selected seat is unavailable", async () => {
+		const card = createCard({
+			id: "task-1",
+			autoReviewEnabled: true,
+			panelReviewMode: "custom",
+			panelReviewFamilies: ["grok"],
+		});
+		const harness = createHarness({
+			board: createBoard({ review: [card] }),
+			selectedAgentId: "codex",
+			panelReviewConfig: { panelReviewEnabled: true, panelReviewFamilies: DEFAULT_PANEL_REVIEW_FAMILIES },
+			runPanelReview: async (input) =>
+				summarizePanelReviewRun({
+					verdicts: [{ family: "grok", verdict: "UNAVAILABLE" }],
+					recordedAt: input.recordedAt,
+					headCommit: "commit-1",
+					selection: input.selection,
+				}),
+		});
+		harness.setProbe("task-1", { exists: true, headCommit: "commit-1", changedFiles: 3 });
+
+		await harness.evaluate();
+
+		const result = findCardInBoard(harness.store.stored.board, "task-1");
+		expect(result?.columnId).toBe("review");
+		expect(result?.card.pendingGitAction ?? null).toBeNull();
+		expect(result?.card.panelReviewRun?.status).toBe("rejected");
 		expect(harness.terminal.writeInput).not.toHaveBeenCalled();
 	});
 });

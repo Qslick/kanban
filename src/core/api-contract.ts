@@ -1,5 +1,28 @@
 import { z } from "zod";
+import { panelReviewFamilySchema, panelReviewModeSchema, panelReviewRunSchema } from "./panel-review";
 import { resolveTaskTitle } from "./task-title.js";
+
+export type {
+	PanelReviewConfig,
+	PanelReviewFamily,
+	PanelReviewMode,
+	PanelReviewRun,
+	PanelReviewRunStatus,
+	PanelReviewVerdict,
+	PanelReviewVerdictKind,
+} from "./panel-review";
+export {
+	DEFAULT_PANEL_REVIEW_CONFIG,
+	DEFAULT_PANEL_REVIEW_ENABLED,
+	DEFAULT_PANEL_REVIEW_FAMILIES,
+	DEFAULT_PANEL_REVIEW_MODE,
+	panelReviewFamilySchema,
+	panelReviewModeSchema,
+	panelReviewRunSchema,
+	panelReviewRunStatusSchema,
+	panelReviewVerdictKindSchema,
+	panelReviewVerdictSchema,
+} from "./panel-review";
 
 export const runtimeWorkspaceFileStatusSchema = z.enum([
 	"modified",
@@ -163,6 +186,9 @@ export const runtimeBoardCardSchema = z
 		createdAt: z.number(),
 		updatedAt: z.number(),
 		pendingGitAction: runtimeTaskPendingGitActionSchema.nullable().optional(),
+		panelReviewMode: panelReviewModeSchema.optional(),
+		panelReviewFamilies: z.array(panelReviewFamilySchema).optional(),
+		panelReviewRun: panelReviewRunSchema.optional(),
 	})
 	.transform(
 		({
@@ -976,6 +1002,8 @@ export const runtimeConfigResponseSchema = z.object({
 	openPrPromptTemplate: z.string(),
 	commitPromptTemplateDefault: z.string(),
 	openPrPromptTemplateDefault: z.string(),
+	panelReviewEnabled: z.boolean().optional(),
+	panelReviewFamilies: z.array(panelReviewFamilySchema).optional(),
 });
 export type RuntimeConfigResponse = z.infer<typeof runtimeConfigResponseSchema>;
 
@@ -987,6 +1015,8 @@ export const runtimeConfigSaveRequestSchema = z.object({
 	readyForReviewNotificationsEnabled: z.boolean().optional(),
 	commitPromptTemplate: z.string().optional(),
 	openPrPromptTemplate: z.string().optional(),
+	panelReviewEnabled: z.boolean().optional(),
+	panelReviewFamilies: z.array(panelReviewFamilySchema).optional(),
 });
 export type RuntimeConfigSaveRequest = z.infer<typeof runtimeConfigSaveRequestSchema>;
 

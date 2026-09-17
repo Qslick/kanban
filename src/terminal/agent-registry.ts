@@ -157,5 +157,7 @@ export function buildRuntimeConfigResponse(
 		openPrPromptTemplate: runtimeConfig.openPrPromptTemplate,
 		commitPromptTemplateDefault: runtimeConfig.commitPromptTemplateDefault,
 		openPrPromptTemplateDefault: runtimeConfig.openPrPromptTemplateDefault,
+		panelReviewEnabled: runtimeConfig.panelReviewEnabled,
+		panelReviewFamilies: runtimeConfig.panelReviewFamilies,
 	};
 }

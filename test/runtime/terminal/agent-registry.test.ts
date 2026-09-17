@@ -29,6 +29,8 @@ function createRuntimeConfigState(overrides: Partial<RuntimeConfigState> = {}): 
 		openPrPromptTemplate: "pr",
 		commitPromptTemplateDefault: "commit",
 		openPrPromptTemplateDefault: "pr",
+		panelReviewEnabled: false,
+		panelReviewFamilies: ["grok", "claude", "gpt", "gemini"],
 		...overrides,
 	};
 }

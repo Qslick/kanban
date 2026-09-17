@@ -13,6 +13,9 @@ import {
 	type BoardDependency,
 	type CardSelection,
 	DEFAULT_TASK_AUTO_REVIEW_MODE,
+	normalizePanelReviewFamilies,
+	normalizePanelReviewMode,
+	normalizePanelReviewRun,
 	resolveTaskAutoReviewMode,
 	type TaskAutoReviewMode,
 	type TaskImage,
@@ -193,6 +196,9 @@ function normalizeCard(rawCard: unknown): BoardCard | null {
 		createdAt?: unknown;
 		updatedAt?: unknown;
 		pendingGitAction?: unknown;
+		panelReviewMode?: unknown;
+		panelReviewFamilies?: unknown;
+		panelReviewRun?: unknown;
 	};
 	const prompt = typeof card.prompt === "string" ? card.prompt.trim() : "";
 	if (!prompt) {
@@ -215,6 +221,9 @@ function normalizeCard(rawCard: unknown): BoardCard | null {
 
 	const now = Date.now();
 	const pendingGitAction = normalizeTaskPendingGitAction(card.pendingGitAction);
+	const panelReviewMode = normalizePanelReviewMode(card.panelReviewMode);
+	const panelReviewFamilies = normalizePanelReviewFamilies(card.panelReviewFamilies);
+	const panelReviewRun = normalizePanelReviewRun(card.panelReviewRun);
 
 	return {
 		id: typeof card.id === "string" && card.id ? card.id : createShortTaskId(createBrowserUuid),
@@ -232,6 +241,9 @@ function normalizeCard(rawCard: unknown): BoardCard | null {
 		createdAt: typeof card.createdAt === "number" ? card.createdAt : now,
 		updatedAt: typeof card.updatedAt === "number" ? card.updatedAt : now,
 		...(pendingGitAction !== undefined ? { pendingGitAction } : {}),
+		...(panelReviewMode !== undefined ? { panelReviewMode } : {}),
+		...(panelReviewFamilies !== undefined ? { panelReviewFamilies } : {}),
+		...(panelReviewRun !== undefined ? { panelReviewRun } : {}),
 	};
 }
 

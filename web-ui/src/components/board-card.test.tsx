@@ -203,6 +203,26 @@ describe("BoardCard", () => {
 		expect(nextCancelButton).toBeUndefined();
 	});
 
+	it("shows panel review status on the card", async () => {
+		await act(async () => {
+			root.render(
+				<BoardCard
+					card={createCard({
+						panelReviewRun: {
+							status: "split",
+							verdicts: [],
+							recordedAt: 1,
+						},
+					})}
+					index={0}
+					columnId="review"
+				/>,
+			);
+		});
+
+		expect(container.textContent).toContain("panel split");
+	});
+
 	it("shows a loading state on the review done button while moving to done", async () => {
 		await act(async () => {
 			root.render(<BoardCard card={createCard()} index={0} columnId="review" isMoveToTrashLoading />);

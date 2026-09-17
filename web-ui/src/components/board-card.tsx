@@ -563,6 +563,11 @@ export function BoardCard({
 									<span className="font-mono text-[10px] font-semibold text-text-tertiary px-1.5 py-0.5 rounded bg-surface-3/80 border border-border/40 shrink-0">
 										{taskKey}
 									</span>
+									{card.panelReviewRun?.status ? (
+										<span className="font-mono text-[10px] text-text-tertiary truncate">
+											panel {card.panelReviewRun.status}
+										</span>
+									) : null}
 								</div>
 								<div className="flex items-center gap-1 shrink-0">
 									{onSaveTitle && !isEditingTitle ? (

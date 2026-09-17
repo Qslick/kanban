@@ -6,6 +6,14 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { getRuntimeAgentCatalogEntry, isRuntimeAgentLaunchSupported } from "../core/agent-catalog";
 import type { RuntimeAgentId, RuntimeProjectShortcut } from "../core/api-contract";
+import {
+	arePanelReviewFamiliesEqual,
+	clonePanelReviewFamilies,
+	DEFAULT_PANEL_REVIEW_ENABLED,
+	DEFAULT_PANEL_REVIEW_FAMILIES,
+	normalizePanelReviewFamilies,
+	type PanelReviewFamily,
+} from "../core/panel-review";
 import { type LockRequest, lockedFileSystem } from "../fs/locked-file-system";
 import { detectInstalledCommands } from "../terminal/agent-registry";
 import { areRuntimeProjectShortcutsEqual } from "./shortcut-utils";
@@ -17,6 +25,8 @@ interface RuntimeGlobalConfigFileShape {
 	readyForReviewNotificationsEnabled?: boolean;
 	commitPromptTemplate?: string;
 	openPrPromptTemplate?: string;
+	panelReviewEnabled?: boolean;
+	panelReviewFamilies?: PanelReviewFamily[];
 }
 
 interface RuntimeProjectConfigFileShape {
@@ -36,6 +46,8 @@ export interface RuntimeConfigState {
 	openPrPromptTemplate: string;
 	commitPromptTemplateDefault: string;
 	openPrPromptTemplateDefault: string;
+	panelReviewEnabled: boolean;
+	panelReviewFamilies: PanelReviewFamily[];
 }
 
 export interface RuntimeConfigUpdateInput {
@@ -46,6 +58,8 @@ export interface RuntimeConfigUpdateInput {
 	shortcuts?: RuntimeProjectShortcut[];
 	commitPromptTemplate?: string;
 	openPrPromptTemplate?: string;
+	panelReviewEnabled?: boolean;
+	panelReviewFamilies?: PanelReviewFamily[];
 }
 
 const RUNTIME_HOME_PARENT_DIR = ".cline";
@@ -293,6 +307,8 @@ function toRuntimeConfigState({
 		),
 		commitPromptTemplateDefault: DEFAULT_COMMIT_PROMPT_TEMPLATE,
 		openPrPromptTemplateDefault: DEFAULT_OPEN_PR_PROMPT_TEMPLATE,
+		panelReviewEnabled: normalizeBoolean(globalConfig?.panelReviewEnabled, DEFAULT_PANEL_REVIEW_ENABLED),
+		panelReviewFamilies: normalizePanelReviewFamilies(globalConfig?.panelReviewFamilies),
 	};
 }
 
@@ -314,6 +330,8 @@ async function writeRuntimeGlobalConfigFile(
 		readyForReviewNotificationsEnabled?: boolean;
 		commitPromptTemplate?: string;
 		openPrPromptTemplate?: string;
+		panelReviewEnabled?: boolean;
+		panelReviewFamilies?: PanelReviewFamily[];
 	},
 ): Promise<void> {
 	const existing = await readRuntimeConfigFile<RuntimeGlobalConfigFileShape>(configPath);
@@ -342,6 +360,20 @@ async function writeRuntimeGlobalConfigFile(
 		config.openPrPromptTemplate === undefined
 			? DEFAULT_OPEN_PR_PROMPT_TEMPLATE
 			: normalizePromptTemplate(config.openPrPromptTemplate, DEFAULT_OPEN_PR_PROMPT_TEMPLATE);
+	const panelReviewEnabled =
+		config.panelReviewEnabled === undefined
+			? DEFAULT_PANEL_REVIEW_ENABLED
+			: normalizeBoolean(config.panelReviewEnabled, DEFAULT_PANEL_REVIEW_ENABLED);
+	const panelReviewFamilies =
+		config.panelReviewFamilies === undefined
+			? [...DEFAULT_PANEL_REVIEW_FAMILIES]
+			: normalizePanelReviewFamilies(config.panelReviewFamilies);
+	const existingPanelReviewEnabled = hasOwnKey(existing, "panelReviewEnabled")
+		? normalizeBoolean(existing?.panelReviewEnabled, DEFAULT_PANEL_REVIEW_ENABLED)
+		: undefined;
+	const existingPanelReviewFamilies = hasOwnKey(existing, "panelReviewFamilies")
+		? normalizePanelReviewFamilies(existing?.panelReviewFamilies)
+		: undefined;
 
 	const payload: RuntimeGlobalConfigFileShape = {};
 	if (selectedAgentId !== undefined) {
@@ -375,6 +407,23 @@ async function writeRuntimeGlobalConfigFile(
 	}
 	if (hasOwnKey(existing, "openPrPromptTemplate") || openPrPromptTemplate !== DEFAULT_OPEN_PR_PROMPT_TEMPLATE) {
 		payload.openPrPromptTemplate = openPrPromptTemplate;
+	}
+	if (config.panelReviewEnabled === undefined) {
+		if (existingPanelReviewEnabled !== undefined) {
+			payload.panelReviewEnabled = existingPanelReviewEnabled;
+		}
+	} else if (hasOwnKey(existing, "panelReviewEnabled") || panelReviewEnabled !== DEFAULT_PANEL_REVIEW_ENABLED) {
+		payload.panelReviewEnabled = panelReviewEnabled;
+	}
+	if (config.panelReviewFamilies === undefined) {
+		if (existingPanelReviewFamilies !== undefined) {
+			payload.panelReviewFamilies = clonePanelReviewFamilies(existingPanelReviewFamilies);
+		}
+	} else if (
+		hasOwnKey(existing, "panelReviewFamilies") ||
+		!arePanelReviewFamiliesEqual(panelReviewFamilies, DEFAULT_PANEL_REVIEW_FAMILIES)
+	) {
+		payload.panelReviewFamilies = clonePanelReviewFamilies(panelReviewFamilies);
 	}
 
 	await lockedFileSystem.writeJsonFileAtomic(configPath, payload, {
@@ -467,6 +516,8 @@ function createRuntimeConfigStateFromValues(input: {
 	shortcuts: RuntimeProjectShortcut[];
 	commitPromptTemplate: string;
 	openPrPromptTemplate: string;
+	panelReviewEnabled: boolean;
+	panelReviewFamilies: PanelReviewFamily[];
 }): RuntimeConfigState {
 	return {
 		globalConfigPath: input.globalConfigPath,
@@ -486,6 +537,8 @@ function createRuntimeConfigStateFromValues(input: {
 		openPrPromptTemplate: normalizePromptTemplate(input.openPrPromptTemplate, DEFAULT_OPEN_PR_PROMPT_TEMPLATE),
 		commitPromptTemplateDefault: DEFAULT_COMMIT_PROMPT_TEMPLATE,
 		openPrPromptTemplateDefault: DEFAULT_OPEN_PR_PROMPT_TEMPLATE,
+		panelReviewEnabled: normalizeBoolean(input.panelReviewEnabled, DEFAULT_PANEL_REVIEW_ENABLED),
+		panelReviewFamilies: clonePanelReviewFamilies(normalizePanelReviewFamilies(input.panelReviewFamilies)),
 	};
 }
 
@@ -500,6 +553,8 @@ export function toGlobalRuntimeConfigState(current: RuntimeConfigState): Runtime
 		shortcuts: [],
 		commitPromptTemplate: current.commitPromptTemplate,
 		openPrPromptTemplate: current.openPrPromptTemplate,
+		panelReviewEnabled: current.panelReviewEnabled,
+		panelReviewFamilies: clonePanelReviewFamilies(current.panelReviewFamilies),
 	});
 }
 
@@ -535,6 +590,8 @@ export async function saveRuntimeConfig(
 		shortcuts: RuntimeProjectShortcut[];
 		commitPromptTemplate: string;
 		openPrPromptTemplate: string;
+		panelReviewEnabled?: boolean;
+		panelReviewFamilies?: PanelReviewFamily[];
 	},
 ): Promise<RuntimeConfigState> {
 	const { globalConfigPath, projectConfigPath } = resolveRuntimeConfigPaths(cwd);
@@ -546,6 +603,8 @@ export async function saveRuntimeConfig(
 			readyForReviewNotificationsEnabled: config.readyForReviewNotificationsEnabled,
 			commitPromptTemplate: config.commitPromptTemplate,
 			openPrPromptTemplate: config.openPrPromptTemplate,
+			panelReviewEnabled: config.panelReviewEnabled,
+			panelReviewFamilies: config.panelReviewFamilies,
 		});
 		await writeRuntimeProjectConfigFile(projectConfigPath, { shortcuts: config.shortcuts });
 		return createRuntimeConfigStateFromValues({
@@ -558,6 +617,8 @@ export async function saveRuntimeConfig(
 			shortcuts: config.shortcuts,
 			commitPromptTemplate: config.commitPromptTemplate,
 			openPrPromptTemplate: config.openPrPromptTemplate,
+			panelReviewEnabled: config.panelReviewEnabled ?? DEFAULT_PANEL_REVIEW_ENABLED,
+			panelReviewFamilies: clonePanelReviewFamilies(config.panelReviewFamilies ?? DEFAULT_PANEL_REVIEW_FAMILIES),
 		});
 	});
 }
@@ -579,6 +640,8 @@ export async function updateRuntimeConfig(cwd: string, updates: RuntimeConfigUpd
 			shortcuts: projectConfigPath ? (updates.shortcuts ?? current.shortcuts) : current.shortcuts,
 			commitPromptTemplate: updates.commitPromptTemplate ?? current.commitPromptTemplate,
 			openPrPromptTemplate: updates.openPrPromptTemplate ?? current.openPrPromptTemplate,
+			panelReviewEnabled: updates.panelReviewEnabled ?? current.panelReviewEnabled,
+			panelReviewFamilies: clonePanelReviewFamilies(updates.panelReviewFamilies ?? current.panelReviewFamilies),
 		};
 
 		const hasChanges =
@@ -588,6 +651,8 @@ export async function updateRuntimeConfig(cwd: string, updates: RuntimeConfigUpd
 			nextConfig.readyForReviewNotificationsEnabled !== current.readyForReviewNotificationsEnabled ||
 			nextConfig.commitPromptTemplate !== current.commitPromptTemplate ||
 			nextConfig.openPrPromptTemplate !== current.openPrPromptTemplate ||
+			nextConfig.panelReviewEnabled !== current.panelReviewEnabled ||
+			!arePanelReviewFamiliesEqual(nextConfig.panelReviewFamilies, current.panelReviewFamilies) ||
 			!areRuntimeProjectShortcutsEqual(nextConfig.shortcuts, current.shortcuts);
 
 		if (!hasChanges) {
@@ -601,6 +666,8 @@ export async function updateRuntimeConfig(cwd: string, updates: RuntimeConfigUpd
 			readyForReviewNotificationsEnabled: nextConfig.readyForReviewNotificationsEnabled,
 			commitPromptTemplate: nextConfig.commitPromptTemplate,
 			openPrPromptTemplate: nextConfig.openPrPromptTemplate,
+			panelReviewEnabled: nextConfig.panelReviewEnabled,
+			panelReviewFamilies: nextConfig.panelReviewFamilies,
 		});
 		await writeRuntimeProjectConfigFile(projectConfigPath, {
 			shortcuts: nextConfig.shortcuts,
@@ -615,6 +682,8 @@ export async function updateRuntimeConfig(cwd: string, updates: RuntimeConfigUpd
 			shortcuts: nextConfig.shortcuts,
 			commitPromptTemplate: nextConfig.commitPromptTemplate,
 			openPrPromptTemplate: nextConfig.openPrPromptTemplate,
+			panelReviewEnabled: nextConfig.panelReviewEnabled,
+			panelReviewFamilies: nextConfig.panelReviewFamilies,
 		});
 	});
 }
@@ -644,6 +713,8 @@ export async function updateGlobalRuntimeConfig(
 				shortcuts: current.shortcuts,
 				commitPromptTemplate: updates.commitPromptTemplate ?? current.commitPromptTemplate,
 				openPrPromptTemplate: updates.openPrPromptTemplate ?? current.openPrPromptTemplate,
+				panelReviewEnabled: updates.panelReviewEnabled ?? current.panelReviewEnabled,
+				panelReviewFamilies: clonePanelReviewFamilies(updates.panelReviewFamilies ?? current.panelReviewFamilies),
 			};
 
 			const hasChanges =
@@ -652,7 +723,9 @@ export async function updateGlobalRuntimeConfig(
 				nextConfig.agentAutonomousModeEnabled !== current.agentAutonomousModeEnabled ||
 				nextConfig.readyForReviewNotificationsEnabled !== current.readyForReviewNotificationsEnabled ||
 				nextConfig.commitPromptTemplate !== current.commitPromptTemplate ||
-				nextConfig.openPrPromptTemplate !== current.openPrPromptTemplate;
+				nextConfig.openPrPromptTemplate !== current.openPrPromptTemplate ||
+				nextConfig.panelReviewEnabled !== current.panelReviewEnabled ||
+				!arePanelReviewFamiliesEqual(nextConfig.panelReviewFamilies, current.panelReviewFamilies);
 
 			if (!hasChanges) {
 				return current;
@@ -665,6 +738,8 @@ export async function updateGlobalRuntimeConfig(
 				readyForReviewNotificationsEnabled: nextConfig.readyForReviewNotificationsEnabled,
 				commitPromptTemplate: nextConfig.commitPromptTemplate,
 				openPrPromptTemplate: nextConfig.openPrPromptTemplate,
+				panelReviewEnabled: nextConfig.panelReviewEnabled,
+				panelReviewFamilies: nextConfig.panelReviewFamilies,
 			});
 
 			return createRuntimeConfigStateFromValues({
@@ -677,6 +752,8 @@ export async function updateGlobalRuntimeConfig(
 				shortcuts: nextConfig.shortcuts,
 				commitPromptTemplate: nextConfig.commitPromptTemplate,
 				openPrPromptTemplate: nextConfig.openPrPromptTemplate,
+				panelReviewEnabled: nextConfig.panelReviewEnabled,
+				panelReviewFamilies: nextConfig.panelReviewFamilies,
 			});
 		},
 	);
