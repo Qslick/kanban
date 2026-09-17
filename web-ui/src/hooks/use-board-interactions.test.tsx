@@ -66,6 +66,19 @@ interface HookSnapshot {
 	handleStartAllBacklogTasks: (taskIds?: string[]) => void;
 	handleCardSelect: (taskId: string) => void;
 	handleConfirmClearTrash: () => void;
+	setSessions: Dispatch<SetStateAction<Record<string, RuntimeTaskSessionSummary>>>;
+}
+
+function createSessionSummary(
+	taskId: string,
+	state: RuntimeTaskSessionSummary["state"],
+	updatedAt: number,
+): RuntimeTaskSessionSummary {
+	return {
+		taskId,
+		state,
+		updatedAt,
+	} as RuntimeTaskSessionSummary;
 }
 
 function createRect(width: number, height: number): DOMRect {
@@ -92,6 +105,7 @@ function HookHarness({
 	selectedCard = null,
 	setSelectedTaskIdOverride,
 	maxInProgressTasks,
+	initialSessions,
 	onSnapshot,
 }: {
 	board: BoardData;
@@ -103,9 +117,10 @@ function HookHarness({
 	selectedCard?: { card: BoardCard; column: { id: "backlog" | "in_progress" | "review" | "trash" } } | null;
 	setSelectedTaskIdOverride?: Dispatch<SetStateAction<string | null>>;
 	maxInProgressTasks?: number;
+	initialSessions?: Record<string, RuntimeTaskSessionSummary>;
 	onSnapshot?: (snapshot: HookSnapshot) => void;
 }): null {
-	const [sessions, setSessions] = useState<Record<string, RuntimeTaskSessionSummary>>({});
+	const [sessions, setSessions] = useState<Record<string, RuntimeTaskSessionSummary>>(initialSessions ?? {});
 	const [, setSelectedTaskId] = useState<string | null>(null);
 	const [, setIsClearTrashDialogOpen] = useState(false);
 	const [, setIsGitHistoryOpen] = useState(false);
@@ -138,6 +153,7 @@ function HookHarness({
 			handleStartAllBacklogTasks: actions.handleStartAllBacklogTasks,
 			handleCardSelect: actions.handleCardSelect,
 			handleConfirmClearTrash: actions.handleConfirmClearTrash,
+			setSessions,
 		});
 	}, [
 		actions.handleCardSelect,
@@ -146,6 +162,7 @@ function HookHarness({
 		actions.handleStartAllBacklogTasks,
 		actions.handleStartTask,
 		onSnapshot,
+		setSessions,
 	]);
 
 	return null;
@@ -925,5 +942,124 @@ describe("useBoardInteractions", () => {
 		expect(startTaskSession).toHaveBeenCalledTimes(1);
 		expect(startTaskSession).toHaveBeenCalledWith(expect.objectContaining({ id: "ready-1" }));
 		expect(notifyErrorMock).not.toHaveBeenCalled();
+	});
+
+	it("leaves a card alone when its session was already interrupted before load", async () => {
+		useProgrammaticCardMovesMock.mockReturnValue({
+			handleProgrammaticCardMoveReady: () => {},
+			setRequestMoveTaskToTrashHandler: () => {},
+			tryProgrammaticCardMove: () => "unavailable",
+			consumeProgrammaticCardMove: () => ({}),
+			resolvePendingProgrammaticTrashMove: () => {},
+			waitForProgrammaticCardMoveAvailability: async () => {},
+			resetProgrammaticCardMoves: () => {},
+			requestMoveTaskToTrashWithAnimation: async () => {},
+			programmaticCardMoveCycle: 0,
+		});
+
+		useLinkedBacklogTaskActionsMock.mockReturnValue({
+			handleCreateDependency: () => {},
+			handleDeleteDependency: () => {},
+			confirmMoveTaskToTrash: async () => {},
+			requestMoveTaskToTrash: async () => {},
+		});
+
+		const runningTask = createTask("task-stranded", "Stranded task", 1);
+		let board: BoardData = {
+			columns: [
+				{ id: "backlog", title: "Backlog", cards: [] },
+				{ id: "in_progress", title: "In Progress", cards: [runningTask] },
+				{ id: "review", title: "Review", cards: [] },
+				{ id: "trash", title: "Done", cards: [] },
+			],
+			dependencies: [],
+		};
+		const setBoard: Dispatch<SetStateAction<BoardData>> = (update) => {
+			board = typeof update === "function" ? (update as (current: BoardData) => BoardData)(board) : update;
+		};
+
+		// Sessions persisted as "interrupted" are the normal state of a board after a crash or
+		// restart. Opening the board must not silently move those cards to Done.
+		await act(async () => {
+			root.render(
+				<HookHarness
+					board={board}
+					setBoard={setBoard}
+					ensureTaskWorkspace={async () => ({ ok: true as const })}
+					startTaskSession={async () => ({ ok: true as const })}
+					initialSessions={{ "task-stranded": createSessionSummary("task-stranded", "interrupted", 5) }}
+				/>,
+			);
+		});
+
+		expect(board.columns.find((column) => column.id === "in_progress")?.cards.map((card) => card.id)).toEqual([
+			"task-stranded",
+		]);
+		expect(board.columns.find((column) => column.id === "trash")?.cards).toEqual([]);
+	});
+
+	it("still moves a card to Done when a watched session becomes interrupted", async () => {
+		useProgrammaticCardMovesMock.mockReturnValue({
+			handleProgrammaticCardMoveReady: () => {},
+			setRequestMoveTaskToTrashHandler: () => {},
+			tryProgrammaticCardMove: () => "unavailable",
+			consumeProgrammaticCardMove: () => ({}),
+			resolvePendingProgrammaticTrashMove: () => {},
+			waitForProgrammaticCardMoveAvailability: async () => {},
+			resetProgrammaticCardMoves: () => {},
+			requestMoveTaskToTrashWithAnimation: async () => {},
+			programmaticCardMoveCycle: 0,
+		});
+
+		useLinkedBacklogTaskActionsMock.mockReturnValue({
+			handleCreateDependency: () => {},
+			handleDeleteDependency: () => {},
+			confirmMoveTaskToTrash: async () => {},
+			requestMoveTaskToTrash: async () => {},
+		});
+
+		let latestSnapshot: HookSnapshot | null = null;
+		const runningTask = createTask("task-live", "Live task", 1);
+		let board: BoardData = {
+			columns: [
+				{ id: "backlog", title: "Backlog", cards: [] },
+				{ id: "in_progress", title: "In Progress", cards: [runningTask] },
+				{ id: "review", title: "Review", cards: [] },
+				{ id: "trash", title: "Done", cards: [] },
+			],
+			dependencies: [],
+		};
+		const setBoard: Dispatch<SetStateAction<BoardData>> = (update) => {
+			board = typeof update === "function" ? (update as (current: BoardData) => BoardData)(board) : update;
+		};
+
+		await act(async () => {
+			root.render(
+				<HookHarness
+					board={board}
+					setBoard={setBoard}
+					ensureTaskWorkspace={async () => ({ ok: true as const })}
+					startTaskSession={async () => ({ ok: true as const })}
+					initialSessions={{ "task-live": createSessionSummary("task-live", "running", 5) }}
+					onSnapshot={(snapshot) => {
+						latestSnapshot = snapshot;
+					}}
+				/>,
+			);
+		});
+
+		if (!latestSnapshot) {
+			throw new Error("Expected a hook snapshot.");
+		}
+
+		// A session we were already watching dying is the real trigger, and must still fire.
+		await act(async () => {
+			latestSnapshot!.setSessions({ "task-live": createSessionSummary("task-live", "interrupted", 6) });
+		});
+
+		expect(board.columns.find((column) => column.id === "in_progress")?.cards).toEqual([]);
+		expect(board.columns.find((column) => column.id === "trash")?.cards.map((card) => card.id)).toEqual([
+			"task-live",
+		]);
 	});
 });

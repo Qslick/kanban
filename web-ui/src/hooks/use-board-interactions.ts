@@ -122,6 +122,10 @@ export function useBoardInteractions({
 	maxInProgressTasks = DEFAULT_MAX_IN_PROGRESS_TASKS,
 }: UseBoardInteractionsInput): UseBoardInteractionsResult {
 	const previousSessionsRef = useRef<Record<string, RuntimeTaskSessionSummary>>({});
+	// previousSessionsRef is scoped to a project, and the reconciliation effect below owns it.
+	// Clearing it from the shared reset effect instead would clobber the seed that effect just
+	// wrote, because effects run in declaration order and that reset is declared later.
+	const previousSessionsProjectIdRef = useRef<string | null>(null);
 	const notificationPermissionPromptInFlightRef = useRef(false);
 	const moveToTrashLoadingByIdRef = useRef<Record<string, true>>({});
 	const pendingProgrammaticStartMoveCompletionByTaskIdRef = useRef<
@@ -439,6 +443,13 @@ export function useBoardInteractions({
 	useEffect(() => {
 		setBoard((currentBoard) => {
 			let nextBoard = currentBoard;
+			if (previousSessionsProjectIdRef.current !== currentProjectId) {
+				// New project: the summaries we remember describe a different board, so forget them
+				// and re-seed from this pass. Every session is then "first seen", which is what keeps
+				// already-interrupted sessions from being read as fresh transitions.
+				previousSessionsProjectIdRef.current = currentProjectId;
+				previousSessionsRef.current = {};
+			}
 			const previousSessions = previousSessionsRef.current;
 			const blockedInterruptedTaskIds = new Set<string>();
 			for (const summary of Object.values(sessions)) {
@@ -471,9 +482,17 @@ export function useBoardInteractions({
 					}
 					continue;
 				}
+				// Trashing on "interrupted" is edge-triggered: it fires when a session we were
+				// already watching dies. `previous` is undefined the first time we see a session,
+				// which happens on every mount and project switch because previousSessionsRef
+				// starts empty — without requiring it, a session that was already interrupted
+				// before the page loaded looks like a fresh transition and its card is silently
+				// moved to Done just by opening the board. Stranded sessions are recovered
+				// through the card's Keep/Resume/Discard flow instead.
 				if (
 					summary.state === "interrupted" &&
-					previous?.state !== "interrupted" &&
+					previous &&
+					previous.state !== "interrupted" &&
 					columnId &&
 					columnId !== "trash"
 				) {
@@ -511,7 +530,7 @@ export function useBoardInteractions({
 			previousSessionsRef.current = nextPreviousSessions;
 			return nextBoard;
 		});
-	}, [programmaticCardMoveCycle, sessions, setBoard, setSelectedTaskId, tryProgrammaticCardMove]);
+	}, [currentProjectId, programmaticCardMoveCycle, sessions, setBoard, setSelectedTaskId, tryProgrammaticCardMove]);
 
 	const { confirmMoveTaskToTrash, handleCreateDependency, handleDeleteDependency, requestMoveTaskToTrash } =
 		useLinkedBacklogTaskActions({
@@ -910,7 +929,6 @@ export function useBoardInteractions({
 	]);
 
 	const resetBoardInteractionsState = useCallback(() => {
-		previousSessionsRef.current = {};
 		moveToTrashLoadingByIdRef.current = {};
 		setMoveToTrashLoadingById({});
 		for (const taskId of Object.keys(pendingProgrammaticStartMoveCompletionByTaskIdRef.current)) {
