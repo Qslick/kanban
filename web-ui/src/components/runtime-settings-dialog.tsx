@@ -6,6 +6,13 @@ import * as RadixPopover from "@radix-ui/react-popover";
 import * as RadixSelect from "@radix-ui/react-select";
 import * as RadixSwitch from "@radix-ui/react-switch";
 import { getRuntimeAgentCatalogEntry, getRuntimeLaunchSupportedAgentCatalog } from "@runtime-agent-catalog";
+import {
+	arePanelReviewFamiliesEqual,
+	DEFAULT_PANEL_REVIEW_ENABLED,
+	DEFAULT_PANEL_REVIEW_FAMILIES,
+	type PanelReviewFamily,
+	resolveConfigPanelReviewFamilies,
+} from "@runtime-panel-review";
 import { areRuntimeProjectShortcutsEqual } from "@runtime-shortcuts";
 import {
 	Bell,
@@ -21,9 +28,11 @@ import {
 	Plus,
 	Settings,
 	SlidersHorizontal,
+	Users,
 	X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PanelReviewFamilyChips } from "@/components/panel-review-controls";
 import { AccountOrganizationSection } from "@/components/shared/account-organization-section";
 import { ClineSetupSection } from "@/components/shared/cline-setup-section";
 import {
@@ -94,7 +103,7 @@ export type RuntimeSettingsSection = "shortcuts";
 
 const SETTINGS_AGENT_ORDER: readonly RuntimeAgentId[] = ["cline", "claude", "codex", "droid", "kiro", "grok"];
 
-type SettingsNavId = "general" | "cline" | "git-prompts" | "notifications" | "appearance" | "project";
+type SettingsNavId = "general" | "cline" | "git-prompts" | "panel-review" | "notifications" | "appearance" | "project";
 
 const SETTINGS_NAV_ITEMS: ReadonlyArray<{
 	id: SettingsNavId;
@@ -105,6 +114,7 @@ const SETTINGS_NAV_ITEMS: ReadonlyArray<{
 	{ id: "general", label: "General", icon: <SlidersHorizontal size={16} /> },
 	{ id: "cline", label: "Cline", icon: <Bot size={16} />, clineOnly: true },
 	{ id: "git-prompts", label: "Git Prompts", icon: <GitCommit size={16} /> },
+	{ id: "panel-review", label: "Panel review", icon: <Users size={16} /> },
 	{ id: "notifications", label: "Notifications", icon: <Bell size={16} /> },
 	{ id: "appearance", label: "Appearance", icon: <Palette size={16} /> },
 	{ id: "project", label: "Project", icon: <FolderOpen size={16} /> },
@@ -369,6 +379,10 @@ export function RuntimeSettingsDialog({
 	const [selectedAgentId, setSelectedAgentId] = useState<RuntimeAgentId>("claude");
 	const [agentAutonomousModeEnabled, setAgentAutonomousModeEnabled] = useState(true);
 	const [readyForReviewNotificationsEnabled, setReadyForReviewNotificationsEnabled] = useState(true);
+	const [panelReviewEnabled, setPanelReviewEnabled] = useState(DEFAULT_PANEL_REVIEW_ENABLED);
+	const [panelReviewFamilies, setPanelReviewFamilies] = useState<PanelReviewFamily[]>([
+		...DEFAULT_PANEL_REVIEW_FAMILIES,
+	]);
 	const [initialThemeId, setInitialThemeId] = useState<ThemeId>(readStoredThemeId);
 	const [draftThemeId, setDraftThemeId] = useState<ThemeId>(readStoredThemeId);
 	const [notificationPermission, setNotificationPermission] = useState<BrowserNotificationPermission>("unsupported");
@@ -442,6 +456,8 @@ export function RuntimeSettingsDialog({
 	const initialSelectedAgentId = configuredAgentId ?? fallbackAgentId;
 	const initialAgentAutonomousModeEnabled = config?.agentAutonomousModeEnabled ?? true;
 	const initialReadyForReviewNotificationsEnabled = config?.readyForReviewNotificationsEnabled ?? true;
+	const initialPanelReviewEnabled = config?.panelReviewEnabled ?? DEFAULT_PANEL_REVIEW_ENABLED;
+	const initialPanelReviewFamilies = resolveConfigPanelReviewFamilies(config?.panelReviewFamilies);
 	const initialShortcuts = config?.shortcuts ?? [];
 	const initialCommitPromptTemplate = config?.commitPromptTemplate ?? "";
 	const initialOpenPrPromptTemplate = config?.openPrPromptTemplate ?? "";
@@ -468,6 +484,12 @@ export function RuntimeSettingsDialog({
 			return true;
 		}
 		if (readyForReviewNotificationsEnabled !== initialReadyForReviewNotificationsEnabled) {
+			return true;
+		}
+		if (panelReviewEnabled !== initialPanelReviewEnabled) {
+			return true;
+		}
+		if (!arePanelReviewFamiliesEqual(panelReviewFamilies, initialPanelReviewFamilies)) {
 			return true;
 		}
 		if (clineSettings.hasUnsavedChanges) {
@@ -502,11 +524,15 @@ export function RuntimeSettingsDialog({
 		initialAgentAutonomousModeEnabled,
 		initialCommitPromptTemplate,
 		initialOpenPrPromptTemplate,
+		initialPanelReviewEnabled,
+		initialPanelReviewFamilies,
 		initialReadyForReviewNotificationsEnabled,
 		initialSelectedAgentId,
 		initialShortcuts,
 		initialThemeId,
 		openPrPromptTemplate,
+		panelReviewEnabled,
+		panelReviewFamilies,
 		readyForReviewNotificationsEnabled,
 		selectedAgentId,
 		shortcuts,
@@ -519,6 +545,8 @@ export function RuntimeSettingsDialog({
 		setSelectedAgentId(configuredAgentId ?? fallbackAgentId);
 		setAgentAutonomousModeEnabled(config?.agentAutonomousModeEnabled ?? true);
 		setReadyForReviewNotificationsEnabled(config?.readyForReviewNotificationsEnabled ?? true);
+		setPanelReviewEnabled(config?.panelReviewEnabled ?? DEFAULT_PANEL_REVIEW_ENABLED);
+		setPanelReviewFamilies(resolveConfigPanelReviewFamilies(config?.panelReviewFamilies));
 		setShortcuts(config?.shortcuts ?? []);
 		setCommitPromptTemplate(config?.commitPromptTemplate ?? "");
 		setOpenPrPromptTemplate(config?.openPrPromptTemplate ?? "");
@@ -527,6 +555,8 @@ export function RuntimeSettingsDialog({
 		config?.agentAutonomousModeEnabled,
 		config?.commitPromptTemplate,
 		config?.openPrPromptTemplate,
+		config?.panelReviewEnabled,
+		config?.panelReviewFamilies,
 		config?.readyForReviewNotificationsEnabled,
 		config?.selectedAgentId,
 		config?.shortcuts,
@@ -701,6 +731,8 @@ export function RuntimeSettingsDialog({
 			selectedAgentId,
 			agentAutonomousModeEnabled,
 			readyForReviewNotificationsEnabled,
+			panelReviewEnabled,
+			panelReviewFamilies,
 			shortcuts,
 			commitPromptTemplate,
 			openPrPromptTemplate,
@@ -905,6 +937,43 @@ export function RuntimeSettingsDialog({
 							/>{" "}
 							to reference {TASK_GIT_BASE_REF_PROMPT_VARIABLE.description}
 						</p>
+					</div>
+
+					{/* ---- Panel review ---- */}
+					<div data-settings-section="panel-review" />
+					<div className="sticky top-0 -mx-5 px-5 pt-4 pb-2 bg-surface-1 z-10">
+						<h2 className="flex items-center gap-2 text-base font-semibold text-text-primary m-0">
+							<Users size={16} className="text-text-secondary" />
+							Panel review
+						</h2>
+					</div>
+					<div className="rounded-lg border border-border bg-surface-0 px-4 py-3 mb-4">
+						<div className="flex items-center gap-2">
+							<RadixSwitch.Root
+								checked={panelReviewEnabled}
+								disabled={controlsDisabled}
+								onCheckedChange={(checked) => {
+									setPanelReviewEnabled(checked);
+									if (checked && panelReviewFamilies.length === 0) {
+										setPanelReviewFamilies([...DEFAULT_PANEL_REVIEW_FAMILIES]);
+									}
+								}}
+								className="relative h-5 w-9 rounded-full bg-surface-4 data-[state=checked]:bg-accent cursor-pointer disabled:opacity-40"
+							>
+								<RadixSwitch.Thumb className="block h-4 w-4 rounded-full bg-white shadow-sm transition-transform translate-x-0.5 data-[state=checked]:translate-x-[18px]" />
+							</RadixSwitch.Root>
+							<span className="text-[13px] text-text-primary">Run a multi-model panel after implement</span>
+						</div>
+						<p className="text-text-secondary text-[13px] mt-2 mb-2">
+							Workspace default for Review. Per-card overrides can inherit, turn this off, or pick custom
+							families. The implementing family is excluded from inherited seats.
+						</p>
+						<PanelReviewFamilyChips
+							families={panelReviewFamilies}
+							minOne={panelReviewEnabled}
+							disabled={controlsDisabled || !panelReviewEnabled}
+							onChange={setPanelReviewFamilies}
+						/>
 					</div>
 
 					{/* ---- Notifications ---- */}

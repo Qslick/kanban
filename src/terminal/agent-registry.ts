@@ -149,6 +149,8 @@ export function buildRuntimeConfigResponse(
 		globalConfigPath: runtimeConfig.globalConfigPath,
 		projectConfigPath: runtimeConfig.projectConfigPath,
 		readyForReviewNotificationsEnabled: runtimeConfig.readyForReviewNotificationsEnabled,
+		panelReviewEnabled: runtimeConfig.panelReviewEnabled,
+		panelReviewFamilies: runtimeConfig.panelReviewFamilies,
 		detectedCommands,
 		agents,
 		shortcuts: runtimeConfig.shortcuts,

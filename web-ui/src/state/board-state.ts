@@ -1,4 +1,11 @@
 import type { DropResult } from "@hello-pangea/dnd";
+import {
+	clonePanelReviewFamilies,
+	isPanelReviewFamily,
+	isPanelReviewMode,
+	resolveTaskPanelReviewMode,
+	sanitizePanelReviewFamilies,
+} from "@runtime-panel-review";
 import { createShortTaskId } from "@runtime-task-id";
 import * as runtimeTaskState from "@runtime-task-state";
 
@@ -13,6 +20,9 @@ import {
 	type BoardDependency,
 	type CardSelection,
 	DEFAULT_TASK_AUTO_REVIEW_MODE,
+	type PanelReviewFamily,
+	type PanelReviewMode,
+	type PanelReviewRun,
 	resolveTaskAutoReviewMode,
 	type TaskAutoReviewMode,
 	type TaskImage,
@@ -28,6 +38,8 @@ export interface TaskDraft {
 	images?: TaskImage[];
 	agentId?: RuntimeAgentId;
 	agentSettings?: RuntimeTaskAgentSettings;
+	panelReviewMode?: PanelReviewMode;
+	panelReviewFamilies?: PanelReviewFamily[];
 	baseRef: string;
 }
 
@@ -171,6 +183,62 @@ function normalizeTaskPendingGitAction(rawPending: unknown): TaskPendingGitActio
 	};
 }
 
+function normalizePanelReviewRun(rawRun: unknown): PanelReviewRun | undefined {
+	if (!rawRun || typeof rawRun !== "object") {
+		return undefined;
+	}
+	const run = rawRun as {
+		status?: unknown;
+		families?: unknown;
+		verdicts?: unknown;
+		recordedAt?: unknown;
+		reportPath?: unknown;
+	};
+	if (
+		run.status !== "pending" &&
+		run.status !== "passed" &&
+		run.status !== "rejected" &&
+		run.status !== "split" &&
+		run.status !== "skipped"
+	) {
+		return undefined;
+	}
+	if (typeof run.recordedAt !== "number") {
+		return undefined;
+	}
+	if (!Array.isArray(run.families) || !Array.isArray(run.verdicts)) {
+		return undefined;
+	}
+	const families = sanitizePanelReviewFamilies(run.families);
+	const verdicts: PanelReviewRun["verdicts"] = [];
+	for (const rawVerdict of run.verdicts) {
+		if (!rawVerdict || typeof rawVerdict !== "object") {
+			continue;
+		}
+		const verdict = rawVerdict as { family?: unknown; verdict?: unknown };
+		if (!isPanelReviewFamily(verdict.family)) {
+			continue;
+		}
+		if (
+			verdict.verdict !== "APPROVE" &&
+			verdict.verdict !== "APPROVE_WITH_CHANGES" &&
+			verdict.verdict !== "REJECT" &&
+			verdict.verdict !== "UNAVAILABLE" &&
+			verdict.verdict !== "BENCHED"
+		) {
+			continue;
+		}
+		verdicts.push({ family: verdict.family, verdict: verdict.verdict });
+	}
+	return {
+		status: run.status,
+		families,
+		verdicts,
+		recordedAt: run.recordedAt,
+		...(typeof run.reportPath === "string" ? { reportPath: run.reportPath } : {}),
+	};
+}
+
 function normalizeCard(rawCard: unknown): BoardCard | null {
 	if (!rawCard || typeof rawCard !== "object") {
 		return null;
@@ -193,6 +261,9 @@ function normalizeCard(rawCard: unknown): BoardCard | null {
 		createdAt?: unknown;
 		updatedAt?: unknown;
 		pendingGitAction?: unknown;
+		panelReviewMode?: unknown;
+		panelReviewFamilies?: unknown;
+		panelReviewRun?: unknown;
 	};
 	const prompt = typeof card.prompt === "string" ? card.prompt.trim() : "";
 	if (!prompt) {
@@ -215,6 +286,11 @@ function normalizeCard(rawCard: unknown): BoardCard | null {
 
 	const now = Date.now();
 	const pendingGitAction = normalizeTaskPendingGitAction(card.pendingGitAction);
+	const panelReviewMode = isPanelReviewMode(card.panelReviewMode) ? card.panelReviewMode : undefined;
+	const panelReviewFamilies = Array.isArray(card.panelReviewFamilies)
+		? clonePanelReviewFamilies(sanitizePanelReviewFamilies(card.panelReviewFamilies))
+		: undefined;
+	const panelReviewRun = normalizePanelReviewRun(card.panelReviewRun);
 
 	return {
 		id: typeof card.id === "string" && card.id ? card.id : createShortTaskId(createBrowserUuid),
@@ -229,6 +305,9 @@ function normalizeCard(rawCard: unknown): BoardCard | null {
 		baseRef,
 		...(typeof card.agentId === "string" && card.agentId ? { agentId: card.agentId as RuntimeAgentId } : {}),
 		...(agentSettings !== undefined ? { agentSettings } : {}),
+		...(panelReviewMode && panelReviewMode !== "inherit" ? { panelReviewMode } : {}),
+		...(panelReviewMode === "custom" && panelReviewFamilies ? { panelReviewFamilies } : {}),
+		...(panelReviewRun !== undefined ? { panelReviewRun } : {}),
 		createdAt: typeof card.createdAt === "number" ? card.createdAt : now,
 		updatedAt: typeof card.updatedAt === "number" ? card.updatedAt : now,
 		...(pendingGitAction !== undefined ? { pendingGitAction } : {}),
@@ -377,6 +456,8 @@ export function addTaskToColumnWithResult(
 			images: draft.images,
 			agentId: draft.agentId,
 			agentSettings: draft.agentSettings,
+			panelReviewMode: draft.panelReviewMode,
+			panelReviewFamilies: draft.panelReviewFamilies,
 			baseRef: draft.baseRef,
 		},
 		createBrowserUuid,
@@ -575,6 +656,9 @@ export function updateTask(board: BoardData, taskId: string, draft: TaskDraft): 
 							: undefined,
 				agentId: draft.agentId,
 				agentSettings: draft.agentSettings,
+				panelReviewMode: draft.panelReviewMode === undefined ? card.panelReviewMode : draft.panelReviewMode,
+				panelReviewFamilies:
+					draft.panelReviewFamilies === undefined ? card.panelReviewFamilies : draft.panelReviewFamilies,
 				baseRef,
 				updatedAt: Date.now(),
 			};
@@ -679,6 +763,64 @@ export function applyTaskDetailAgentSettingsChange(
 			...(change.reasoningEffort ? { reasoningEffort: change.reasoningEffort } : {}),
 		},
 	});
+}
+
+export function applyTaskPanelReviewOverride(
+	board: BoardData,
+	taskId: string,
+	override: {
+		panelReviewMode: PanelReviewMode;
+		panelReviewFamilies?: PanelReviewFamily[];
+	},
+): { board: BoardData; updated: boolean } {
+	const selection = findCardSelection(board, taskId);
+	if (!selection) {
+		return { board, updated: false };
+	}
+
+	const mode = resolveTaskPanelReviewMode(override.panelReviewMode);
+	const families = mode === "custom" ? clonePanelReviewFamilies(override.panelReviewFamilies) : undefined;
+	if (mode === "custom" && (!families || families.length === 0)) {
+		return { board, updated: false };
+	}
+
+	let updated = false;
+	const columns = board.columns.map((column) => {
+		let columnUpdated = false;
+		const cards = column.cards.map((card) => {
+			if (card.id !== taskId) {
+				return card;
+			}
+			columnUpdated = true;
+			updated = true;
+			const { panelReviewMode: _mode, panelReviewFamilies: _families, ...rest } = card;
+			if (mode === "inherit") {
+				return {
+					...rest,
+					updatedAt: Date.now(),
+				};
+			}
+			if (mode === "off") {
+				return {
+					...rest,
+					panelReviewMode: "off" as const,
+					updatedAt: Date.now(),
+				};
+			}
+			return {
+				...rest,
+				panelReviewMode: "custom" as const,
+				panelReviewFamilies: families,
+				updatedAt: Date.now(),
+			};
+		});
+		return columnUpdated ? { ...column, cards } : column;
+	});
+
+	if (!updated) {
+		return { board, updated: false };
+	}
+	return { board: withUpdatedColumns(board, columns), updated: true };
 }
 
 export function disableTaskAutoReview(board: BoardData, taskId: string): { board: BoardData; updated: boolean } {

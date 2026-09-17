@@ -5,7 +5,13 @@ import { readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { getRuntimeAgentCatalogEntry, isRuntimeAgentLaunchSupported } from "../core/agent-catalog";
-import type { RuntimeAgentId, RuntimeProjectShortcut } from "../core/api-contract";
+import type { RuntimeAgentId, RuntimePanelReviewFamily, RuntimeProjectShortcut } from "../core/api-contract";
+import {
+	arePanelReviewFamiliesEqual,
+	DEFAULT_PANEL_REVIEW_ENABLED,
+	DEFAULT_PANEL_REVIEW_FAMILIES,
+	resolveConfigPanelReviewFamilies,
+} from "../core/panel-review";
 import { type LockRequest, lockedFileSystem } from "../fs/locked-file-system";
 import { detectInstalledCommands } from "../terminal/agent-registry";
 import { areRuntimeProjectShortcutsEqual } from "./shortcut-utils";
@@ -15,6 +21,8 @@ interface RuntimeGlobalConfigFileShape {
 	selectedShortcutLabel?: string;
 	agentAutonomousModeEnabled?: boolean;
 	readyForReviewNotificationsEnabled?: boolean;
+	panelReviewEnabled?: boolean;
+	panelReviewFamilies?: RuntimePanelReviewFamily[];
 	commitPromptTemplate?: string;
 	openPrPromptTemplate?: string;
 }
@@ -31,6 +39,8 @@ export interface RuntimeConfigState {
 	selectedShortcutLabel: string | null;
 	agentAutonomousModeEnabled: boolean;
 	readyForReviewNotificationsEnabled: boolean;
+	panelReviewEnabled: boolean;
+	panelReviewFamilies: RuntimePanelReviewFamily[];
 	shortcuts: RuntimeProjectShortcut[];
 	commitPromptTemplate: string;
 	openPrPromptTemplate: string;
@@ -43,6 +53,8 @@ export interface RuntimeConfigUpdateInput {
 	selectedShortcutLabel?: string | null;
 	agentAutonomousModeEnabled?: boolean;
 	readyForReviewNotificationsEnabled?: boolean;
+	panelReviewEnabled?: boolean;
+	panelReviewFamilies?: RuntimePanelReviewFamily[];
 	shortcuts?: RuntimeProjectShortcut[];
 	commitPromptTemplate?: string;
 	openPrPromptTemplate?: string;
@@ -285,6 +297,8 @@ function toRuntimeConfigState({
 			globalConfig?.readyForReviewNotificationsEnabled,
 			DEFAULT_READY_FOR_REVIEW_NOTIFICATIONS_ENABLED,
 		),
+		panelReviewEnabled: normalizeBoolean(globalConfig?.panelReviewEnabled, DEFAULT_PANEL_REVIEW_ENABLED),
+		panelReviewFamilies: resolveConfigPanelReviewFamilies(globalConfig?.panelReviewFamilies),
 		shortcuts: normalizeShortcuts(projectConfig?.shortcuts),
 		commitPromptTemplate: normalizePromptTemplate(globalConfig?.commitPromptTemplate, DEFAULT_COMMIT_PROMPT_TEMPLATE),
 		openPrPromptTemplate: normalizePromptTemplate(
@@ -312,6 +326,8 @@ async function writeRuntimeGlobalConfigFile(
 		selectedShortcutLabel?: string | null;
 		agentAutonomousModeEnabled?: boolean;
 		readyForReviewNotificationsEnabled?: boolean;
+		panelReviewEnabled?: boolean;
+		panelReviewFamilies?: RuntimePanelReviewFamily[];
 		commitPromptTemplate?: string;
 		openPrPromptTemplate?: string;
 	},
@@ -334,6 +350,11 @@ async function writeRuntimeGlobalConfigFile(
 		config.readyForReviewNotificationsEnabled === undefined
 			? DEFAULT_READY_FOR_REVIEW_NOTIFICATIONS_ENABLED
 			: normalizeBoolean(config.readyForReviewNotificationsEnabled, DEFAULT_READY_FOR_REVIEW_NOTIFICATIONS_ENABLED);
+	const panelReviewEnabled =
+		config.panelReviewEnabled === undefined
+			? DEFAULT_PANEL_REVIEW_ENABLED
+			: normalizeBoolean(config.panelReviewEnabled, DEFAULT_PANEL_REVIEW_ENABLED);
+	const panelReviewFamilies = resolveConfigPanelReviewFamilies(config.panelReviewFamilies);
 	const commitPromptTemplate =
 		config.commitPromptTemplate === undefined
 			? DEFAULT_COMMIT_PROMPT_TEMPLATE
@@ -369,6 +390,15 @@ async function writeRuntimeGlobalConfigFile(
 		readyForReviewNotificationsEnabled !== DEFAULT_READY_FOR_REVIEW_NOTIFICATIONS_ENABLED
 	) {
 		payload.readyForReviewNotificationsEnabled = readyForReviewNotificationsEnabled;
+	}
+	if (hasOwnKey(existing, "panelReviewEnabled") || panelReviewEnabled !== DEFAULT_PANEL_REVIEW_ENABLED) {
+		payload.panelReviewEnabled = panelReviewEnabled;
+	}
+	if (
+		hasOwnKey(existing, "panelReviewFamilies") ||
+		!arePanelReviewFamiliesEqual(panelReviewFamilies, DEFAULT_PANEL_REVIEW_FAMILIES)
+	) {
+		payload.panelReviewFamilies = panelReviewFamilies;
 	}
 	if (hasOwnKey(existing, "commitPromptTemplate") || commitPromptTemplate !== DEFAULT_COMMIT_PROMPT_TEMPLATE) {
 		payload.commitPromptTemplate = commitPromptTemplate;
@@ -464,6 +494,8 @@ function createRuntimeConfigStateFromValues(input: {
 	selectedShortcutLabel: string | null;
 	agentAutonomousModeEnabled: boolean;
 	readyForReviewNotificationsEnabled: boolean;
+	panelReviewEnabled: boolean;
+	panelReviewFamilies: RuntimePanelReviewFamily[];
 	shortcuts: RuntimeProjectShortcut[];
 	commitPromptTemplate: string;
 	openPrPromptTemplate: string;
@@ -481,6 +513,8 @@ function createRuntimeConfigStateFromValues(input: {
 			input.readyForReviewNotificationsEnabled,
 			DEFAULT_READY_FOR_REVIEW_NOTIFICATIONS_ENABLED,
 		),
+		panelReviewEnabled: normalizeBoolean(input.panelReviewEnabled, DEFAULT_PANEL_REVIEW_ENABLED),
+		panelReviewFamilies: resolveConfigPanelReviewFamilies(input.panelReviewFamilies),
 		shortcuts: normalizeShortcuts(input.shortcuts),
 		commitPromptTemplate: normalizePromptTemplate(input.commitPromptTemplate, DEFAULT_COMMIT_PROMPT_TEMPLATE),
 		openPrPromptTemplate: normalizePromptTemplate(input.openPrPromptTemplate, DEFAULT_OPEN_PR_PROMPT_TEMPLATE),
@@ -497,6 +531,8 @@ export function toGlobalRuntimeConfigState(current: RuntimeConfigState): Runtime
 		selectedShortcutLabel: current.selectedShortcutLabel,
 		agentAutonomousModeEnabled: current.agentAutonomousModeEnabled,
 		readyForReviewNotificationsEnabled: current.readyForReviewNotificationsEnabled,
+		panelReviewEnabled: current.panelReviewEnabled,
+		panelReviewFamilies: current.panelReviewFamilies,
 		shortcuts: [],
 		commitPromptTemplate: current.commitPromptTemplate,
 		openPrPromptTemplate: current.openPrPromptTemplate,
@@ -532,6 +568,8 @@ export async function saveRuntimeConfig(
 		selectedShortcutLabel: string | null;
 		agentAutonomousModeEnabled: boolean;
 		readyForReviewNotificationsEnabled: boolean;
+		panelReviewEnabled: boolean;
+		panelReviewFamilies: RuntimePanelReviewFamily[];
 		shortcuts: RuntimeProjectShortcut[];
 		commitPromptTemplate: string;
 		openPrPromptTemplate: string;
@@ -544,6 +582,8 @@ export async function saveRuntimeConfig(
 			selectedShortcutLabel: config.selectedShortcutLabel,
 			agentAutonomousModeEnabled: config.agentAutonomousModeEnabled,
 			readyForReviewNotificationsEnabled: config.readyForReviewNotificationsEnabled,
+			panelReviewEnabled: config.panelReviewEnabled,
+			panelReviewFamilies: config.panelReviewFamilies,
 			commitPromptTemplate: config.commitPromptTemplate,
 			openPrPromptTemplate: config.openPrPromptTemplate,
 		});
@@ -555,6 +595,8 @@ export async function saveRuntimeConfig(
 			selectedShortcutLabel: config.selectedShortcutLabel,
 			agentAutonomousModeEnabled: config.agentAutonomousModeEnabled,
 			readyForReviewNotificationsEnabled: config.readyForReviewNotificationsEnabled,
+			panelReviewEnabled: config.panelReviewEnabled,
+			panelReviewFamilies: config.panelReviewFamilies,
 			shortcuts: config.shortcuts,
 			commitPromptTemplate: config.commitPromptTemplate,
 			openPrPromptTemplate: config.openPrPromptTemplate,
@@ -576,6 +618,11 @@ export async function updateRuntimeConfig(cwd: string, updates: RuntimeConfigUpd
 			agentAutonomousModeEnabled: updates.agentAutonomousModeEnabled ?? current.agentAutonomousModeEnabled,
 			readyForReviewNotificationsEnabled:
 				updates.readyForReviewNotificationsEnabled ?? current.readyForReviewNotificationsEnabled,
+			panelReviewEnabled: updates.panelReviewEnabled ?? current.panelReviewEnabled,
+			panelReviewFamilies:
+				updates.panelReviewFamilies === undefined
+					? current.panelReviewFamilies
+					: resolveConfigPanelReviewFamilies(updates.panelReviewFamilies),
 			shortcuts: projectConfigPath ? (updates.shortcuts ?? current.shortcuts) : current.shortcuts,
 			commitPromptTemplate: updates.commitPromptTemplate ?? current.commitPromptTemplate,
 			openPrPromptTemplate: updates.openPrPromptTemplate ?? current.openPrPromptTemplate,
@@ -586,6 +633,8 @@ export async function updateRuntimeConfig(cwd: string, updates: RuntimeConfigUpd
 			nextConfig.selectedShortcutLabel !== current.selectedShortcutLabel ||
 			nextConfig.agentAutonomousModeEnabled !== current.agentAutonomousModeEnabled ||
 			nextConfig.readyForReviewNotificationsEnabled !== current.readyForReviewNotificationsEnabled ||
+			nextConfig.panelReviewEnabled !== current.panelReviewEnabled ||
+			!arePanelReviewFamiliesEqual(nextConfig.panelReviewFamilies, current.panelReviewFamilies) ||
 			nextConfig.commitPromptTemplate !== current.commitPromptTemplate ||
 			nextConfig.openPrPromptTemplate !== current.openPrPromptTemplate ||
 			!areRuntimeProjectShortcutsEqual(nextConfig.shortcuts, current.shortcuts);
@@ -599,6 +648,8 @@ export async function updateRuntimeConfig(cwd: string, updates: RuntimeConfigUpd
 			selectedShortcutLabel: nextConfig.selectedShortcutLabel,
 			agentAutonomousModeEnabled: nextConfig.agentAutonomousModeEnabled,
 			readyForReviewNotificationsEnabled: nextConfig.readyForReviewNotificationsEnabled,
+			panelReviewEnabled: nextConfig.panelReviewEnabled,
+			panelReviewFamilies: nextConfig.panelReviewFamilies,
 			commitPromptTemplate: nextConfig.commitPromptTemplate,
 			openPrPromptTemplate: nextConfig.openPrPromptTemplate,
 		});
@@ -612,6 +663,8 @@ export async function updateRuntimeConfig(cwd: string, updates: RuntimeConfigUpd
 			selectedShortcutLabel: nextConfig.selectedShortcutLabel,
 			agentAutonomousModeEnabled: nextConfig.agentAutonomousModeEnabled,
 			readyForReviewNotificationsEnabled: nextConfig.readyForReviewNotificationsEnabled,
+			panelReviewEnabled: nextConfig.panelReviewEnabled,
+			panelReviewFamilies: nextConfig.panelReviewFamilies,
 			shortcuts: nextConfig.shortcuts,
 			commitPromptTemplate: nextConfig.commitPromptTemplate,
 			openPrPromptTemplate: nextConfig.openPrPromptTemplate,
@@ -641,6 +694,11 @@ export async function updateGlobalRuntimeConfig(
 				agentAutonomousModeEnabled: updates.agentAutonomousModeEnabled ?? current.agentAutonomousModeEnabled,
 				readyForReviewNotificationsEnabled:
 					updates.readyForReviewNotificationsEnabled ?? current.readyForReviewNotificationsEnabled,
+				panelReviewEnabled: updates.panelReviewEnabled ?? current.panelReviewEnabled,
+				panelReviewFamilies:
+					updates.panelReviewFamilies === undefined
+						? current.panelReviewFamilies
+						: resolveConfigPanelReviewFamilies(updates.panelReviewFamilies),
 				shortcuts: current.shortcuts,
 				commitPromptTemplate: updates.commitPromptTemplate ?? current.commitPromptTemplate,
 				openPrPromptTemplate: updates.openPrPromptTemplate ?? current.openPrPromptTemplate,
@@ -651,6 +709,8 @@ export async function updateGlobalRuntimeConfig(
 				nextConfig.selectedShortcutLabel !== current.selectedShortcutLabel ||
 				nextConfig.agentAutonomousModeEnabled !== current.agentAutonomousModeEnabled ||
 				nextConfig.readyForReviewNotificationsEnabled !== current.readyForReviewNotificationsEnabled ||
+				nextConfig.panelReviewEnabled !== current.panelReviewEnabled ||
+				!arePanelReviewFamiliesEqual(nextConfig.panelReviewFamilies, current.panelReviewFamilies) ||
 				nextConfig.commitPromptTemplate !== current.commitPromptTemplate ||
 				nextConfig.openPrPromptTemplate !== current.openPrPromptTemplate;
 
@@ -663,6 +723,8 @@ export async function updateGlobalRuntimeConfig(
 				selectedShortcutLabel: nextConfig.selectedShortcutLabel,
 				agentAutonomousModeEnabled: nextConfig.agentAutonomousModeEnabled,
 				readyForReviewNotificationsEnabled: nextConfig.readyForReviewNotificationsEnabled,
+				panelReviewEnabled: nextConfig.panelReviewEnabled,
+				panelReviewFamilies: nextConfig.panelReviewFamilies,
 				commitPromptTemplate: nextConfig.commitPromptTemplate,
 				openPrPromptTemplate: nextConfig.openPrPromptTemplate,
 			});
@@ -674,6 +736,8 @@ export async function updateGlobalRuntimeConfig(
 				selectedShortcutLabel: nextConfig.selectedShortcutLabel,
 				agentAutonomousModeEnabled: nextConfig.agentAutonomousModeEnabled,
 				readyForReviewNotificationsEnabled: nextConfig.readyForReviewNotificationsEnabled,
+				panelReviewEnabled: nextConfig.panelReviewEnabled,
+				panelReviewFamilies: nextConfig.panelReviewFamilies,
 				shortcuts: nextConfig.shortcuts,
 				commitPromptTemplate: nextConfig.commitPromptTemplate,
 				openPrPromptTemplate: nextConfig.openPrPromptTemplate,

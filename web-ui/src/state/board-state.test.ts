@@ -7,6 +7,7 @@ import {
 	applyDragResult,
 	applyTaskDetailAgentSettingsChange,
 	applyTaskDetailAgentSettingsSelection,
+	applyTaskPanelReviewOverride,
 	clearColumnTasks,
 	disableTaskAutoReview,
 	getTaskColumnId,
@@ -867,5 +868,54 @@ describe("board dependency state", () => {
 			modelId: "anthropic/claude-opus-4.6",
 			reasoningEffort: "medium",
 		});
+	});
+});
+
+describe("applyTaskPanelReviewOverride", () => {
+	it("stores custom families and can return to inherit", () => {
+		let board = createInitialBoardData();
+		board = addTaskToColumn(board, "backlog", {
+			prompt: "Panel task",
+			baseRef: "main",
+		});
+		const task = board.columns.find((column) => column.id === "backlog")?.cards[0];
+		expect(task).toBeDefined();
+		if (!task) {
+			throw new Error("Expected backlog task to exist");
+		}
+
+		const custom = applyTaskPanelReviewOverride(board, task.id, {
+			panelReviewMode: "custom",
+			panelReviewFamilies: ["grok", "gpt"],
+		});
+		expect(custom.updated).toBe(true);
+		const customTask = custom.board.columns.find((column) => column.id === "backlog")?.cards[0];
+		expect(customTask?.panelReviewMode).toBe("custom");
+		expect(customTask?.panelReviewFamilies).toEqual(["grok", "gpt"]);
+
+		const inherited = applyTaskPanelReviewOverride(custom.board, task.id, {
+			panelReviewMode: "inherit",
+		});
+		const inheritedTask = inherited.board.columns.find((column) => column.id === "backlog")?.cards[0];
+		expect(inheritedTask?.panelReviewMode).toBeUndefined();
+		expect(inheritedTask?.panelReviewFamilies).toBeUndefined();
+	});
+
+	it("rejects custom with no families", () => {
+		let board = createInitialBoardData();
+		board = addTaskToColumn(board, "backlog", {
+			prompt: "Panel task",
+			baseRef: "main",
+		});
+		const task = board.columns.find((column) => column.id === "backlog")?.cards[0];
+		expect(task).toBeDefined();
+		if (!task) {
+			throw new Error("Expected backlog task to exist");
+		}
+		const result = applyTaskPanelReviewOverride(board, task.id, {
+			panelReviewMode: "custom",
+			panelReviewFamilies: [],
+		});
+		expect(result.updated).toBe(false);
 	});
 });

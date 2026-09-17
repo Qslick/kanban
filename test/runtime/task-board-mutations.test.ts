@@ -274,6 +274,61 @@ describe("per-task agent/model/provider overrides", () => {
 	});
 });
 
+describe("panel review card fields", () => {
+	it("omits inherit by default and persists custom families", () => {
+		const created = addTaskToColumn(
+			createBoard(),
+			"backlog",
+			{
+				prompt: "Task",
+				baseRef: "main",
+				panelReviewMode: "custom",
+				panelReviewFamilies: ["grok", "claude"],
+			},
+			() => "aaaaa111",
+		);
+		expect(created.task.panelReviewMode).toBe("custom");
+		expect(created.task.panelReviewFamilies).toEqual(["grok", "claude"]);
+
+		const inherited = addTaskToColumn(
+			createBoard(),
+			"backlog",
+			{ prompt: "Task", baseRef: "main" },
+			() => "bbbbb111",
+		);
+		expect(inherited.task.panelReviewMode).toBeUndefined();
+		expect(inherited.task.panelReviewFamilies).toBeUndefined();
+	});
+
+	it("preserves panel review when other fields update and can switch to off", () => {
+		const created = addTaskToColumn(
+			createBoard(),
+			"backlog",
+			{
+				prompt: "Task",
+				baseRef: "main",
+				panelReviewMode: "custom",
+				panelReviewFamilies: ["gpt"],
+			},
+			() => "aaaaa111",
+		);
+		const preserved = updateTask(created.board, created.task.id, {
+			prompt: "Updated",
+			baseRef: "main",
+		});
+		expect(preserved.task?.panelReviewMode).toBe("custom");
+		expect(preserved.task?.panelReviewFamilies).toEqual(["gpt"]);
+
+		const turnedOff = updateTask(preserved.board, created.task.id, {
+			prompt: "Updated",
+			baseRef: "main",
+			panelReviewMode: "off",
+		});
+		expect(turnedOff.task?.panelReviewMode).toBe("off");
+		expect(turnedOff.task?.panelReviewFamilies).toBeUndefined();
+	});
+});
+
 describe("AND dependency auto-start", () => {
 	it("does not unlock a backlog card until every review prerequisite is done", () => {
 		const createA = addTaskToColumn(createBoard(), "review", { prompt: "Task A", baseRef: "main" }, () => "aaaaa111");

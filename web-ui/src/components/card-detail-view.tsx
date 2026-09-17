@@ -1,4 +1,5 @@
 import type { DropResult } from "@hello-pangea/dnd";
+import { DEFAULT_PANEL_REVIEW_FAMILIES, type PanelReviewFamily, type PanelReviewMode } from "@runtime-panel-review";
 import { Files, GitCompareArrows, Maximize2, MessageSquare, Minimize2, X } from "lucide-react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -8,6 +9,7 @@ import { ClineAgentChatPanel, type ClineAgentChatPanelHandle } from "@/component
 import { ColumnContextPanel } from "@/components/detail-panels/column-context-panel";
 import { type DiffLineComment, DiffViewerPanel } from "@/components/detail-panels/diff-viewer-panel";
 import { FileTreePanel } from "@/components/detail-panels/file-tree-panel";
+import { PanelReviewCardOverride } from "@/components/panel-review-controls";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import type { ClineChatActionResult } from "@/hooks/use-cline-chat-runtime-actions";
@@ -370,6 +372,7 @@ export function CardDetailView({
 	isDocumentVisible = true,
 	onAgentSettingsSaved,
 	onTaskAgentSettingsChanged,
+	onPanelReviewOverrideChange,
 }: {
 	selection: CardSelection;
 	currentProjectId: string | null;
@@ -432,6 +435,10 @@ export function CardDetailView({
 	isDocumentVisible?: boolean;
 	onAgentSettingsSaved?: () => void;
 	onTaskAgentSettingsChanged?: (settings: { providerId: string; modelId: string; reasoningEffort: string }) => void;
+	onPanelReviewOverrideChange?: (next: {
+		panelReviewMode: PanelReviewMode;
+		panelReviewFamilies?: PanelReviewFamily[];
+	}) => void;
 }): React.ReactElement {
 	const isMobile = useIsMobile();
 	const [mobileTab, setMobileTab] = useState<MobileTab>("chat");
@@ -701,6 +708,16 @@ export function CardDetailView({
 		/>
 	);
 
+	const panelReviewOverride = (
+		<PanelReviewCardOverride
+			mode={selection.card.panelReviewMode}
+			families={selection.card.panelReviewFamilies}
+			workspaceEnabled={runtimeConfig?.panelReviewEnabled === true}
+			workspaceFamilies={runtimeConfig?.panelReviewFamilies ?? [...DEFAULT_PANEL_REVIEW_FAMILIES]}
+			onChange={onPanelReviewOverrideChange}
+		/>
+	);
+
 	if (isMobile) {
 		return (
 			<div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-0">
@@ -712,7 +729,8 @@ export function CardDetailView({
 							className="min-h-0 min-w-0 flex-1 flex-col"
 							style={{ display: mobileTab === "chat" ? "flex" : "none" }}
 						>
-							{agentChatPanel}
+							{panelReviewOverride}
+							<div className="flex min-h-0 min-w-0 flex-1 flex-col">{agentChatPanel}</div>
 						</div>
 						{/* Diff panel */}
 						<div
@@ -842,10 +860,11 @@ export function CardDetailView({
 					<>
 						<div ref={mainRowRef} className="flex min-h-0 flex-1 overflow-hidden">
 							<div
-								className="min-h-0 min-w-0"
+								className="min-h-0 min-w-0 flex-col"
 								style={{ display: isDiffExpanded ? "none" : "flex", width: agentPanelPercent }}
 							>
-								{agentChatPanel}
+								{panelReviewOverride}
+								<div className="flex min-h-0 min-w-0 flex-1">{agentChatPanel}</div>
 							</div>
 							{!isDiffExpanded ? (
 								<ResizeHandle

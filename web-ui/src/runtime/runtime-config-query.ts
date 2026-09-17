@@ -28,6 +28,7 @@ import type {
 	RuntimeConfigResponse,
 	RuntimeDebugResetAllStateResponse,
 	RuntimeFeaturebaseTokenResponse,
+	RuntimePanelReviewFamily,
 	RuntimeProjectShortcut,
 	RuntimeRunUpdateResponse,
 	RuntimeUpdateStatusResponse,
@@ -46,6 +47,8 @@ export async function saveRuntimeConfig(
 		agentAutonomousModeEnabled?: boolean;
 		shortcuts?: RuntimeProjectShortcut[];
 		readyForReviewNotificationsEnabled?: boolean;
+		panelReviewEnabled?: boolean;
+		panelReviewFamilies?: RuntimePanelReviewFamily[];
 		commitPromptTemplate?: string;
 		openPrPromptTemplate?: string;
 	},

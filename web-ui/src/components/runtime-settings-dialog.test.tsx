@@ -75,6 +75,7 @@ vi.mock("@radix-ui/react-select", () => ({
 }));
 
 const resetLayoutCustomizationsMock = vi.hoisted(() => vi.fn());
+const saveRuntimeConfigMock = vi.hoisted(() => vi.fn(async () => true));
 const clineSetupSectionOnSavedRef = vi.hoisted(() => ({
 	onSaved: null as null | (() => void),
 }));
@@ -143,7 +144,7 @@ vi.mock("@/runtime/use-runtime-config", () => ({
 		isLoading: false,
 		isSaving: false,
 		refresh: vi.fn(),
-		save: vi.fn(async () => true),
+		save: saveRuntimeConfigMock,
 	}),
 }));
 
@@ -172,6 +173,8 @@ const savedClineOauthConfig = {
 	selectedShortcutLabel: null,
 	agentAutonomousModeEnabled: true,
 	readyForReviewNotificationsEnabled: false,
+	panelReviewEnabled: false,
+	panelReviewFamilies: ["grok", "claude", "gpt", "gemini"],
 	effectiveCommand: "cline",
 	detectedCommands: [],
 	shortcuts: [],
@@ -225,6 +228,7 @@ describe("RuntimeSettingsDialog", () => {
 
 	beforeEach(() => {
 		resetLayoutCustomizationsMock.mockReset();
+		saveRuntimeConfigMock.mockClear();
 		clineSetupSectionOnSavedRef.onSaved = null;
 		window.localStorage.clear();
 		document.documentElement.removeAttribute("data-theme");
@@ -413,5 +417,59 @@ describe("RuntimeSettingsDialog", () => {
 		});
 
 		expect(handleSaved).toHaveBeenCalledTimes(1);
+	});
+
+	it("saves panel review toggle and family chips", async () => {
+		await act(async () => {
+			root.render(
+				<RuntimeSettingsDialog
+					open={true}
+					workspaceId={"workspace-1"}
+					initialConfig={savedClineOauthConfig}
+					onOpenChange={() => {}}
+				/>,
+			);
+		});
+
+		expect(document.body.textContent).toContain("Panel review");
+		const familyGroup = document.body.querySelector('[aria-label="Panel review families"]');
+		expect(familyGroup).not.toBeNull();
+
+		const grokChip = Array.from(familyGroup?.querySelectorAll("button") ?? []).find(
+			(button) => button.textContent?.trim() === "Grok",
+		);
+		expect(grokChip).toBeInstanceOf(HTMLButtonElement);
+		expect(grokChip?.disabled).toBe(true);
+
+		const switches = Array.from(document.body.querySelectorAll('button[role="switch"]'));
+		const panelSwitch = switches.find((element) =>
+			element.parentElement?.textContent?.includes("Run a multi-model panel after implement"),
+		);
+		expect(panelSwitch).toBeInstanceOf(HTMLButtonElement);
+		if (!(panelSwitch instanceof HTMLButtonElement)) {
+			throw new Error("Expected a panel review switch.");
+		}
+
+		await act(async () => {
+			panelSwitch.click();
+		});
+
+		expect(grokChip?.disabled).toBe(false);
+
+		await act(async () => {
+			grokChip?.click();
+		});
+
+		const saveButton = findButtonByText(document.body, "Save");
+		await act(async () => {
+			saveButton?.click();
+		});
+
+		expect(saveRuntimeConfigMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				panelReviewEnabled: true,
+				panelReviewFamilies: ["claude", "gpt", "gemini"],
+			}),
+		);
 	});
 });

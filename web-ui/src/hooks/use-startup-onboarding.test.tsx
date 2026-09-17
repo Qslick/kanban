@@ -23,6 +23,8 @@ function createRuntimeConfigResponse(selectedAgentId: RuntimeConfigResponse["sel
 		globalConfigPath: "/tmp/.cline/kanban/config.json",
 		projectConfigPath: "/tmp/project/.cline/kanban/config.json",
 		readyForReviewNotificationsEnabled: true,
+		panelReviewEnabled: false,
+		panelReviewFamilies: ["grok", "claude", "gpt", "gemini"],
 		detectedCommands: ["codex"],
 		agents: [
 			{

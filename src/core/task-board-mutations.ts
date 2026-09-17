@@ -4,11 +4,14 @@ import type {
 	RuntimeBoardColumnId,
 	RuntimeBoardData,
 	RuntimeBoardDependency,
+	RuntimePanelReviewFamily,
+	RuntimePanelReviewMode,
 	RuntimeTaskAgentSettings,
 	RuntimeTaskAutoReviewMode,
 	RuntimeTaskImage,
 	RuntimeTaskPendingGitAction,
 } from "./api-contract";
+import { clonePanelReviewFamilies, resolveTaskPanelReviewMode } from "./panel-review";
 import { cloneRuntimeTaskAgentSettings } from "./task-agent-settings";
 import { createUniqueTaskId } from "./task-id";
 import { resolveTaskTitle } from "./task-title";
@@ -35,6 +38,8 @@ export interface RuntimeCreateTaskInput {
 	images?: RuntimeTaskImage[];
 	agentId?: RuntimeAgentId;
 	agentSettings?: RuntimeTaskAgentSettings;
+	panelReviewMode?: RuntimePanelReviewMode;
+	panelReviewFamilies?: RuntimePanelReviewFamily[];
 	baseRef: string;
 }
 
@@ -47,6 +52,8 @@ export interface RuntimeUpdateTaskInput {
 	images?: RuntimeTaskImage[];
 	agentId?: RuntimeAgentId | null;
 	agentSettings?: RuntimeTaskAgentSettings | null;
+	panelReviewMode?: RuntimePanelReviewMode;
+	panelReviewFamilies?: RuntimePanelReviewFamily[];
 	baseRef: string;
 }
 
@@ -55,6 +62,27 @@ function normalizeTaskAutoReviewMode(value: RuntimeTaskAutoReviewMode | null | u
 		return value;
 	}
 	return "commit";
+}
+
+function panelReviewPersistFields(input: {
+	mode?: RuntimePanelReviewMode | null;
+	families?: RuntimePanelReviewFamily[] | null;
+}): {
+	panelReviewMode?: RuntimePanelReviewMode;
+	panelReviewFamilies?: RuntimePanelReviewFamily[];
+} {
+	const mode = resolveTaskPanelReviewMode(input.mode);
+	if (mode === "inherit") {
+		return {};
+	}
+	if (mode === "off") {
+		return { panelReviewMode: "off" };
+	}
+	const families = clonePanelReviewFamilies(input.families ?? undefined);
+	return {
+		panelReviewMode: "custom",
+		...(families ? { panelReviewFamilies: families } : {}),
+	};
 }
 
 // Copy image metadata so board tasks do not retain caller-owned array or object references.
@@ -317,6 +345,10 @@ export function addTaskToColumn(
 		...(input.agentSettings !== undefined
 			? { agentSettings: cloneRuntimeTaskAgentSettings(input.agentSettings) }
 			: {}),
+		...panelReviewPersistFields({
+			mode: input.panelReviewMode,
+			families: input.panelReviewFamilies,
+		}),
 		baseRef,
 		createdAt: now,
 		updatedAt: now,
@@ -648,7 +680,7 @@ export function updateTask(
 				return card;
 			}
 			columnUpdated = true;
-			updatedTask = {
+			const nextTask: RuntimeBoardCard = {
 				...card,
 				title: resolveTaskTitle(input.title, prompt),
 				prompt,
@@ -666,6 +698,18 @@ export function updateTask(
 				baseRef,
 				updatedAt: now,
 			};
+			if (input.panelReviewMode !== undefined || input.panelReviewFamilies !== undefined) {
+				const { panelReviewMode: _mode, panelReviewFamilies: _families, ...withoutPanelReview } = nextTask;
+				updatedTask = {
+					...withoutPanelReview,
+					...panelReviewPersistFields({
+						mode: input.panelReviewMode ?? card.panelReviewMode,
+						families: input.panelReviewFamilies ?? card.panelReviewFamilies,
+					}),
+				};
+			} else {
+				updatedTask = nextTask;
+			}
 			return updatedTask;
 		});
 		return columnUpdated ? { ...column, cards } : column;

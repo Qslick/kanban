@@ -11,6 +11,12 @@ import type {
 	RuntimeWorkspaceStateResponse,
 } from "../core/api-contract";
 import { runtimeAgentIdSchema } from "../core/api-contract";
+import {
+	type PanelReviewFamily,
+	type PanelReviewMode,
+	parsePanelReviewFamiliesInput,
+	parsePanelReviewMode,
+} from "../core/panel-review";
 import { buildKanbanRuntimeUrl, getKanbanRuntimeOrigin, getRuntimeFetch } from "../core/runtime-endpoint";
 import { cloneRuntimeTaskAgentSettings } from "../core/task-agent-settings";
 import {
@@ -165,6 +171,27 @@ function parseAutoReviewMode(value: string | undefined): "commit" | "pr" | undef
 		return value;
 	}
 	throw new Error(`Invalid auto review mode "${value}". Expected: commit, pr.`);
+}
+
+export function resolvePanelReviewCliInput(input: {
+	panelReviewMode?: PanelReviewMode;
+	panelReviewFamilies?: PanelReviewFamily[];
+}): {
+	panelReviewMode?: PanelReviewMode;
+	panelReviewFamilies?: PanelReviewFamily[];
+} {
+	const mode = input.panelReviewMode;
+	const families = input.panelReviewFamilies;
+	if (families !== undefined && mode !== "custom") {
+		throw new Error("--panel-review-families requires --panel-review custom.");
+	}
+	if (mode === "custom" && (families === undefined || families.length === 0)) {
+		throw new Error("--panel-review custom requires --panel-review-families with at least one family.");
+	}
+	return {
+		...(mode !== undefined ? { panelReviewMode: mode } : {}),
+		...(families !== undefined ? { panelReviewFamilies: families } : {}),
+	};
 }
 
 const VALID_AGENT_IDS = runtimeAgentIdSchema.options;
@@ -483,6 +510,11 @@ function formatTaskRecord(
 		startInPlanMode: task.startInPlanMode,
 		autoReviewEnabled: task.autoReviewEnabled === true,
 		autoReviewMode: task.autoReviewMode ?? "commit",
+		panelReviewMode: task.panelReviewMode ?? "inherit",
+		...(task.panelReviewMode === "custom" && task.panelReviewFamilies
+			? { panelReviewFamilies: task.panelReviewFamilies }
+			: {}),
+		...(task.panelReviewRun ? { panelReviewRun: task.panelReviewRun } : {}),
 		...(task.agentId ? { agentId: task.agentId } : {}),
 		...formatTaskAgentSettings(task.agentSettings),
 		createdAt: task.createdAt,
@@ -637,6 +669,8 @@ async function createTask(input: {
 	autoReviewMode?: "commit" | "pr";
 	agentId?: RuntimeAgentId;
 	agentSettings?: RuntimeTaskAgentSettings;
+	panelReviewMode?: PanelReviewMode;
+	panelReviewFamilies?: PanelReviewFamily[];
 }): Promise<JsonRecord> {
 	const workspaceRepoPath = await resolveWorkspaceRepoPath(input.projectPath, input.cwd);
 	const workspaceId = await ensureRuntimeWorkspace(workspaceRepoPath);
@@ -644,6 +678,10 @@ async function createTask(input: {
 	if (shouldWarnOnExplicitAgentId(input.agentId)) {
 		warnOnAgentSettingsMechanismGaps(input.agentId, input.agentSettings);
 	}
+	const panelReview = resolvePanelReviewCliInput({
+		panelReviewMode: input.panelReviewMode,
+		panelReviewFamilies: input.panelReviewFamilies,
+	});
 	const created = await updateRuntimeWorkspaceState(runtimeClient, workspaceRepoPath, (state) => {
 		const resolvedBaseRef = (input.baseRef ?? "").trim() || resolveTaskBaseRef(state);
 		if (!resolvedBaseRef) {
@@ -660,6 +698,8 @@ async function createTask(input: {
 				autoReviewMode: input.autoReviewMode,
 				agentId: input.agentId,
 				agentSettings: input.agentSettings,
+				panelReviewMode: panelReview.panelReviewMode,
+				panelReviewFamilies: panelReview.panelReviewFamilies,
 				baseRef: resolvedBaseRef,
 			},
 			() => globalThis.crypto.randomUUID(),
@@ -682,6 +722,10 @@ async function createTask(input: {
 			startInPlanMode: created.startInPlanMode,
 			autoReviewEnabled: created.autoReviewEnabled === true,
 			autoReviewMode: created.autoReviewMode ?? "commit",
+			panelReviewMode: created.panelReviewMode ?? "inherit",
+			...(created.panelReviewMode === "custom" && created.panelReviewFamilies
+				? { panelReviewFamilies: created.panelReviewFamilies }
+				: {}),
 			...(created.agentId ? { agentId: created.agentId } : {}),
 			...formatTaskAgentSettings(created.agentSettings),
 		},
@@ -702,6 +746,8 @@ async function updateTaskCommand(input: {
 	providerId?: string | null;
 	modelId?: string | null;
 	reasoningEffort?: ParsedTaskReasoningEffort;
+	panelReviewMode?: PanelReviewMode;
+	panelReviewFamilies?: PanelReviewFamily[];
 }): Promise<JsonRecord> {
 	if (
 		input.title === undefined &&
@@ -713,7 +759,9 @@ async function updateTaskCommand(input: {
 		input.agentId === undefined &&
 		input.providerId === undefined &&
 		input.modelId === undefined &&
-		input.reasoningEffort === undefined
+		input.reasoningEffort === undefined &&
+		input.panelReviewMode === undefined &&
+		input.panelReviewFamilies === undefined
 	) {
 		throw new Error("task update requires at least one field to change.");
 	}
@@ -721,6 +769,10 @@ async function updateTaskCommand(input: {
 	const workspaceRepoPath = await resolveWorkspaceRepoPath(input.projectPath, input.cwd);
 	const workspaceId = await ensureRuntimeWorkspace(workspaceRepoPath);
 	const runtimeClient = createRuntimeTrpcClient(workspaceId);
+	const panelReview = resolvePanelReviewCliInput({
+		panelReviewMode: input.panelReviewMode,
+		panelReviewFamilies: input.panelReviewFamilies,
+	});
 	let mergedAgentSettings: RuntimeTaskAgentSettings | null | undefined;
 	const updated = await updateRuntimeWorkspaceState(runtimeClient, workspaceRepoPath, (runtimeState) => {
 		const taskRecord = findTaskRecord(runtimeState, input.taskId);
@@ -743,6 +795,8 @@ async function updateTaskCommand(input: {
 			autoReviewMode: input.autoReviewMode ?? taskRecord.task.autoReviewMode ?? "commit",
 			agentId: input.agentId,
 			agentSettings,
+			panelReviewMode: panelReview.panelReviewMode,
+			panelReviewFamilies: panelReview.panelReviewFamilies,
 		});
 		if (!updatedTask.updated || !updatedTask.task) {
 			throw new Error(`Task "${input.taskId}" could not be updated.`);
@@ -1318,6 +1372,8 @@ export function registerTaskCommand(program: Command): void {
 		.option("--start-in-plan-mode [value]", "Set plan mode (true|false). Flag-only implies true.")
 		.option("--auto-review-enabled [value]", "Enable auto-review behavior (true|false). Flag-only implies true.")
 		.option("--auto-review-mode <mode>", "Auto-review mode: commit | pr.", parseAutoReviewMode)
+		.option("--panel-review <mode>", "Panel review: inherit | off | custom.", parsePanelReviewMode)
+		.option("--panel-review-families <families>", "Comma-separated families: grok,claude,gpt,gemini.")
 		.option("--agent-id <id>", formatAgentIdOptionHelp("create"))
 		.option("--provider <id>", "Provider override for the task's agent. Valid values depend on the agent.")
 		.option("--model <id>", "Model override for the task's agent. Valid values depend on the agent.")
@@ -1334,6 +1390,8 @@ export function registerTaskCommand(program: Command): void {
 				startInPlanMode?: unknown;
 				autoReviewEnabled?: unknown;
 				autoReviewMode?: "commit" | "pr";
+				panelReview?: PanelReviewMode;
+				panelReviewFamilies?: string;
 				agentId?: string;
 				provider?: string;
 				model?: string;
@@ -1353,6 +1411,11 @@ export function registerTaskCommand(program: Command): void {
 							startInPlanMode: parseOptionalBooleanOption(options.startInPlanMode, "--start-in-plan-mode"),
 							autoReviewEnabled: parseOptionalBooleanOption(options.autoReviewEnabled, "--auto-review-enabled"),
 							autoReviewMode: options.autoReviewMode,
+							panelReviewMode: options.panelReview,
+							panelReviewFamilies:
+								options.panelReviewFamilies === undefined
+									? undefined
+									: parsePanelReviewFamiliesInput(options.panelReviewFamilies),
 							agentId: parseAgentId(options.agentId) ?? undefined,
 							agentSettings: buildTaskAgentSettingsForCreate({
 								providerId:
@@ -1393,6 +1456,8 @@ export function registerTaskCommand(program: Command): void {
 		.option("--start-in-plan-mode [value]", "Set plan mode (true|false). Flag-only implies true.")
 		.option("--auto-review-enabled [value]", "Enable auto-review behavior (true|false). Flag-only implies true.")
 		.option("--auto-review-mode <mode>", "Auto-review mode: commit | pr.", parseAutoReviewMode)
+		.option("--panel-review <mode>", "Panel review: inherit | off | custom.", parsePanelReviewMode)
+		.option("--panel-review-families <families>", "Comma-separated families: grok,claude,gpt,gemini.")
 		.option("--agent-id <id>", formatAgentIdOptionHelp("update"))
 		.option(
 			"--provider <id>",
@@ -1419,6 +1484,8 @@ export function registerTaskCommand(program: Command): void {
 				startInPlanMode?: unknown;
 				autoReviewEnabled?: unknown;
 				autoReviewMode?: "commit" | "pr";
+				panelReview?: PanelReviewMode;
+				panelReviewFamilies?: string;
 				agentId?: string;
 				provider?: string;
 				model?: string;
@@ -1439,6 +1506,11 @@ export function registerTaskCommand(program: Command): void {
 							startInPlanMode: parseOptionalBooleanOption(options.startInPlanMode, "--start-in-plan-mode"),
 							autoReviewEnabled: parseOptionalBooleanOption(options.autoReviewEnabled, "--auto-review-enabled"),
 							autoReviewMode: options.autoReviewMode,
+							panelReviewMode: options.panelReview,
+							panelReviewFamilies:
+								options.panelReviewFamilies === undefined
+									? undefined
+									: parsePanelReviewFamiliesInput(options.panelReviewFamilies),
 							agentId: parseAgentId(options.agentId),
 							providerId: parseOptionalStringOrDefault(
 								resolveSettingsFlag(options.provider, options.clineProvider, "--provider", "--cline-provider"),

@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+	PANEL_REVIEW_FAMILIES,
+	PANEL_REVIEW_MODES,
+	PANEL_REVIEW_RUN_STATUSES,
+	PANEL_REVIEW_VERDICTS,
+} from "./panel-review.js";
 import { resolveTaskTitle } from "./task-title.js";
 
 export const runtimeWorkspaceFileStatusSchema = z.enum([
@@ -144,6 +150,29 @@ export const runtimeTaskPendingGitActionSchema = z.object({
 });
 export type RuntimeTaskPendingGitAction = z.infer<typeof runtimeTaskPendingGitActionSchema>;
 
+export const runtimePanelReviewFamilySchema = z.enum(PANEL_REVIEW_FAMILIES);
+export type RuntimePanelReviewFamily = z.infer<typeof runtimePanelReviewFamilySchema>;
+
+export const runtimePanelReviewModeSchema = z.enum(PANEL_REVIEW_MODES);
+export type RuntimePanelReviewMode = z.infer<typeof runtimePanelReviewModeSchema>;
+
+export const runtimePanelReviewVerdictSchema = z.enum(PANEL_REVIEW_VERDICTS);
+export type RuntimePanelReviewVerdict = z.infer<typeof runtimePanelReviewVerdictSchema>;
+
+export const runtimePanelReviewRunSchema = z.object({
+	status: z.enum(PANEL_REVIEW_RUN_STATUSES),
+	families: z.array(runtimePanelReviewFamilySchema),
+	verdicts: z.array(
+		z.object({
+			family: runtimePanelReviewFamilySchema,
+			verdict: runtimePanelReviewVerdictSchema,
+		}),
+	),
+	recordedAt: z.number(),
+	reportPath: z.string().optional(),
+});
+export type RuntimePanelReviewRun = z.infer<typeof runtimePanelReviewRunSchema>;
+
 export const runtimeBoardCardSchema = z
 	.object({
 		id: z.string(),
@@ -163,6 +192,9 @@ export const runtimeBoardCardSchema = z
 		createdAt: z.number(),
 		updatedAt: z.number(),
 		pendingGitAction: runtimeTaskPendingGitActionSchema.nullable().optional(),
+		panelReviewMode: runtimePanelReviewModeSchema.optional(),
+		panelReviewFamilies: z.array(runtimePanelReviewFamilySchema).optional(),
+		panelReviewRun: runtimePanelReviewRunSchema.optional(),
 	})
 	.transform(
 		({
@@ -968,6 +1000,8 @@ export const runtimeConfigResponseSchema = z.object({
 	globalConfigPath: z.string(),
 	projectConfigPath: z.string().nullable(),
 	readyForReviewNotificationsEnabled: z.boolean(),
+	panelReviewEnabled: z.boolean(),
+	panelReviewFamilies: z.array(runtimePanelReviewFamilySchema),
 	detectedCommands: z.array(z.string()),
 	agents: z.array(runtimeAgentDefinitionSchema),
 	shortcuts: z.array(runtimeProjectShortcutSchema),
@@ -985,6 +1019,8 @@ export const runtimeConfigSaveRequestSchema = z.object({
 	agentAutonomousModeEnabled: z.boolean().optional(),
 	shortcuts: z.array(runtimeProjectShortcutSchema).optional(),
 	readyForReviewNotificationsEnabled: z.boolean().optional(),
+	panelReviewEnabled: z.boolean().optional(),
+	panelReviewFamilies: z.array(runtimePanelReviewFamilySchema).optional(),
 	commitPromptTemplate: z.string().optional(),
 	openPrPromptTemplate: z.string().optional(),
 });

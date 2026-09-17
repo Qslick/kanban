@@ -69,7 +69,11 @@ import { useRuntimeProjectConfig } from "@/runtime/use-runtime-project-config";
 import { useTerminalConnectionReady } from "@/runtime/use-terminal-connection-ready";
 import { useWorkspacePersistence } from "@/runtime/use-workspace-persistence";
 import { saveWorkspaceState } from "@/runtime/workspace-state-query";
-import { applyTaskDetailAgentSettingsChange, findCardSelection } from "@/state/board-state";
+import {
+	applyTaskDetailAgentSettingsChange,
+	applyTaskPanelReviewOverride,
+	findCardSelection,
+} from "@/state/board-state";
 import {
 	getTaskWorkspaceInfo,
 	getTaskWorkspaceSnapshot,
@@ -77,7 +81,7 @@ import {
 	resetWorkspaceMetadataStore,
 } from "@/stores/workspace-metadata-store";
 import { useTerminalThemeColors } from "@/terminal/theme-colors";
-import type { BoardData } from "@/types";
+import type { BoardData, PanelReviewFamily, PanelReviewMode } from "@/types";
 
 export default function App(): ReactElement {
 	const terminalThemeColors = useTerminalThemeColors();
@@ -740,6 +744,20 @@ export default function App(): ReactElement {
 		[defaultTaskClineProviderId, runtimeProjectConfig, selectedCard, setBoard],
 	);
 
+	const handlePanelReviewOverrideChange = useCallback(
+		(next: { panelReviewMode: PanelReviewMode; panelReviewFamilies?: PanelReviewFamily[] }) => {
+			if (!selectedCard) {
+				return;
+			}
+			const taskId = selectedCard.card.id;
+			setBoard((currentBoard) => {
+				const result = applyTaskPanelReviewOverride(currentBoard, taskId, next);
+				return result.updated ? result.board : currentBoard;
+			});
+		},
+		[selectedCard, setBoard],
+	);
+
 	const handleCreateDialogOpenChange = useCallback(
 		(open: boolean) => {
 			if (!open) {
@@ -948,6 +966,7 @@ export default function App(): ReactElement {
 												}
 												onDragEnd={handleDragEnd}
 												defaultClineModelId={runtimeProjectConfig?.clineProviderSettings?.modelId ?? null}
+												panelReviewEnabled={runtimeProjectConfig?.panelReviewEnabled === true}
 											/>
 										)}
 									</div>
@@ -1064,6 +1083,7 @@ export default function App(): ReactElement {
 									isDocumentVisible={isDocumentVisible}
 									onAgentSettingsSaved={refreshRuntimeProjectConfig}
 									onTaskAgentSettingsChanged={handleClineTaskSettingsChangedForTask}
+									onPanelReviewOverrideChange={handlePanelReviewOverrideChange}
 								/>
 							</div>
 						) : null}

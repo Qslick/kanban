@@ -184,6 +184,8 @@ function createRuntimeConfigState(): RuntimeConfigState {
 		selectedShortcutLabel: null,
 		agentAutonomousModeEnabled: true,
 		readyForReviewNotificationsEnabled: true,
+		panelReviewEnabled: false,
+		panelReviewFamilies: ["grok", "claude", "gpt", "gemini"],
 		shortcuts: [],
 		commitPromptTemplate: "commit",
 		openPrPromptTemplate: "pr",

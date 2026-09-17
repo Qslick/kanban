@@ -75,6 +75,8 @@ function createRuntimeConfigResponse(
 		globalConfigPath: "/tmp/global-config.json",
 		projectConfigPath: "/tmp/project/.cline/kanban/config.json",
 		readyForReviewNotificationsEnabled: true,
+		panelReviewEnabled: false,
+		panelReviewFamilies: ["grok", "claude", "gpt", "gemini"],
 		detectedCommands: ["cline"],
 		agents: [
 			{

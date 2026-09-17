@@ -58,6 +58,7 @@ export function BoardColumn({
 	readyNowFilter,
 	onToggleReadyNowFilter,
 	isCardReadyNow,
+	panelReviewEnabled,
 }: {
 	column: BoardColumnModel;
 	taskSessions: Record<string, RuntimeTaskSessionSummary>;
@@ -91,6 +92,7 @@ export function BoardColumn({
 	readyNowFilter?: boolean;
 	onToggleReadyNowFilter?: () => void;
 	isCardReadyNow?: (taskId: string) => boolean;
+	panelReviewEnabled?: boolean;
 }): React.ReactElement {
 	const canCreate = column.id === "backlog" && onCreateTask;
 	const canStartAllTasks = column.id === "backlog" && onStartAllTasks;
@@ -143,6 +145,13 @@ export function BoardColumn({
 						<span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-semibold bg-surface-3/80 text-text-secondary border border-border/50">
 							{visibleCards.length}
 						</span>
+						{column.id === "review" && panelReviewEnabled ? (
+							<Tooltip side="bottom" content="Panel review is enabled for this workspace">
+								<span className="inline-flex items-center h-5 px-1.5 rounded-full text-[11px] font-semibold bg-surface-3/80 text-text-secondary border border-border/50">
+									Panel
+								</span>
+							</Tooltip>
+						) : null}
 					</div>
 					<div className="flex items-center gap-1 shrink-0">
 						{canToggleReadyNow ? (
