@@ -47,6 +47,7 @@ export function useWorkspacePersistence({
 	const latestPersistRequestIdRef = useRef(0);
 	const persistInFlightRef = useRef(false);
 	const persistQueuedRef = useRef(false);
+	const recoveringFromConflictRef = useRef(false);
 	const currentProjectIdRef = useRef<string | null>(currentProjectId);
 	const sessionsRef = useRef(sessions);
 	const lastPersistedBoardRef = useRef<BoardData | null>(null);
@@ -70,12 +71,19 @@ export function useWorkspacePersistence({
 		}
 		latestHydrationNonceRef.current = hydrationNonce;
 		skipNextPersistRef.current = true;
+		recoveringFromConflictRef.current = false;
 		lastPersistedWorkspaceIdRef.current = currentProjectId;
 		lastPersistedBoardRef.current = board;
 	}, [board, currentProjectId, hydrationNonce]);
 
 	useEffect(() => {
-		if (!canPersistWorkspaceState || !isDocumentVisible || isWorkspaceStateRefreshing || workspaceRevision == null) {
+		if (
+			!canPersistWorkspaceState ||
+			!isDocumentVisible ||
+			isWorkspaceStateRefreshing ||
+			workspaceRevision == null ||
+			recoveringFromConflictRef.current
+		) {
 			return;
 		}
 		if (persistInFlightRef.current) {
@@ -123,11 +131,16 @@ export function useWorkspacePersistence({
 					onWorkspaceRevisionChange(saved.revision);
 				} catch (error) {
 					if (error instanceof WorkspaceStateConflictError) {
+						// Do not bump workspaceRevision to the server's current
+						// revision here. That would let this effect re-run with
+						// the stale in-memory board and expectedRevision matching
+						// disk, overwriting CLI-created cards (create/link).
+						recoveringFromConflictRef.current = true;
+						persistQueuedRef.current = false;
 						if (
 							requestId === latestPersistRequestIdRef.current &&
 							currentProjectIdRef.current === persistWorkspaceId
 						) {
-							onWorkspaceRevisionChange(error.currentRevision);
 							onWorkspaceStateConflict?.({
 								workspaceId: persistWorkspaceId,
 								currentRevision: error.currentRevision,
@@ -142,9 +155,11 @@ export function useWorkspacePersistence({
 					// Keep the UI usable even if persistence is temporarily unavailable.
 				} finally {
 					persistInFlightRef.current = false;
-					if (persistQueuedRef.current) {
+					if (persistQueuedRef.current && !recoveringFromConflictRef.current) {
 						persistQueuedRef.current = false;
 						setPersistCycle((current) => current + 1);
+					} else {
+						persistQueuedRef.current = false;
 					}
 				}
 			})();
