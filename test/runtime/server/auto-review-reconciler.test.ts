@@ -417,6 +417,76 @@ describe("auto-review reconciler", () => {
 		expect(findCardInBoard(harness.store.stored.board, "task-1")?.card.pendingGitAction ?? null).toBeNull();
 		expect(harness.terminal.writeInput).not.toHaveBeenCalled();
 	});
+
+	it("does not auto-review a card whose session failed", async () => {
+		const card = createCard({ id: "task-1", autoReviewEnabled: true });
+		const harness = createHarness({
+			board: createBoard({ review: [card] }),
+			sessions: {
+				"task-1": {
+					taskId: "task-1",
+					state: "awaiting_review",
+					agentId: "claude",
+					workspacePath: "/tmp/worktree",
+					pid: null,
+					startedAt: 1,
+					updatedAt: 1,
+					lastOutputAt: 1,
+					reviewReason: "error",
+					exitCode: 1,
+					lastHookAt: 1,
+					latestHookActivity: null,
+				},
+			},
+		});
+		harness.setProbe("task-1", { exists: true, headCommit: "commit-1", changedFiles: 3 });
+
+		await harness.evaluate();
+
+		expect(findCardInBoard(harness.store.stored.board, "task-1")?.columnId).toBe("review");
+		expect(findCardInBoard(harness.store.stored.board, "task-1")?.card.pendingGitAction ?? null).toBeNull();
+		expect(harness.terminal.writeInput).not.toHaveBeenCalled();
+	});
+
+	it("disarms a failed review card instead of completing it", async () => {
+		const armedCard = createCard({
+			id: "task-1",
+			autoReviewEnabled: true,
+			pendingGitAction: {
+				action: "commit",
+				requestedAt: Date.now(),
+				headCommitAtRequest: "commit-1",
+				attempt: 0,
+			},
+		});
+		const harness = createHarness({
+			board: createBoard({ review: [armedCard] }),
+			sessions: {
+				"task-1": {
+					taskId: "task-1",
+					state: "failed",
+					agentId: "claude",
+					workspacePath: "/tmp/worktree",
+					pid: null,
+					startedAt: 1,
+					updatedAt: 1,
+					lastOutputAt: 1,
+					reviewReason: "error",
+					exitCode: 1,
+					lastHookAt: 1,
+					latestHookActivity: null,
+				},
+			},
+		});
+		harness.setProbe("task-1", { exists: true, headCommit: "commit-2", changedFiles: 0 });
+
+		await harness.evaluate();
+
+		const result = findCardInBoard(harness.store.stored.board, "task-1");
+		expect(result?.columnId).toBe("review");
+		expect(result?.card.pendingGitAction ?? null).toBeNull();
+		expect(harness.terminal.writeInput).not.toHaveBeenCalled();
+	});
 });
 
 function findCardInBoard(

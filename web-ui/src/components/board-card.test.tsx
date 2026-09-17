@@ -540,6 +540,35 @@ describe("BoardCard", () => {
 		expect(container.textContent).not.toContain("fs_write");
 	});
 
+	it("shows a failure indicator for review cards that ended in error", async () => {
+		await act(async () => {
+			root.render(
+				<BoardCard
+					card={createCard()}
+					index={0}
+					columnId="review"
+					sessionSummary={createSummary("awaiting_review", {
+						reviewReason: "error",
+						latestHookActivity: {
+							activityText: null,
+							toolName: null,
+							toolInputSummary: null,
+							finalMessage: "Tool result is missing",
+							hookEventName: "agent_error",
+							notificationType: null,
+							source: "cline-sdk",
+						},
+					})}
+				/>,
+			);
+		});
+
+		expect(container.textContent).toContain("Tool result is missing");
+		const errorDot = container.querySelector("span.inline-block.shrink-0.rounded-full");
+		expect(errorDot).not.toBeNull();
+		expect((errorDot as HTMLElement).style.backgroundColor).toBe("var(--color-status-red)");
+	});
+
 	it("keeps showing the last cline tool label during assistant streaming", async () => {
 		await act(async () => {
 			root.render(

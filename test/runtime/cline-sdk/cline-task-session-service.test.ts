@@ -1871,7 +1871,7 @@ describe("stripIncompleteToolTurns", () => {
 			},
 			{
 				role: "user",
-				content: [{ type: "tool_result", tool_use_id: "call-1", name: "run_tests", content: "all passing" }],
+				content: [{ type: "tool_result", tool_use_id: "call-1", content: "all passing" }],
 			},
 			{ role: "assistant", content: "All tests passed." },
 		];
@@ -1900,7 +1900,7 @@ describe("stripIncompleteToolTurns", () => {
 			},
 			{
 				role: "user",
-				content: [{ type: "tool_result", tool_use_id: "call-1", name: "read_file", content: "file body" }],
+				content: [{ type: "tool_result", tool_use_id: "call-1", content: "file body" }],
 			},
 			{ role: "assistant", content: "First step done." },
 			{ role: "user", content: "second" },
@@ -1931,7 +1931,7 @@ describe("stripIncompleteToolTurns", () => {
 			},
 			{
 				role: "user",
-				content: [{ type: "tool_result", tool_use_id: "call-1", name: "step_one", content: "done" }],
+				content: [{ type: "tool_result", tool_use_id: "call-1", content: "done" }],
 			},
 		];
 		// call-2 has no result, so the whole turn is dropped from the assistant message on.
@@ -1942,7 +1942,7 @@ describe("stripIncompleteToolTurns", () => {
 
 	it("ignores string content and non-assistant tool blocks", () => {
 		const messages: PersistedMessage[] = [
-			{ role: "user", content: [{ type: "tool_result", tool_use_id: "call-x", name: "noop", content: "stray" }] },
+			{ role: "user", content: [{ type: "tool_result", tool_use_id: "call-x", content: "stray" }] },
 			{ role: "assistant", content: "plain text only" },
 		];
 		expect(stripIncompleteToolTurns(messages)).toBe(messages);

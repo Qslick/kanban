@@ -129,6 +129,10 @@ function resolveAutoReviewMode(card: RuntimeBoardCard): RuntimeTaskAutoReviewMod
 	return card.autoReviewMode === "pr" ? "pr" : "commit";
 }
 
+function isFailedReviewSession(session: RuntimeTaskSessionSummary | null | undefined): boolean {
+	return session?.state === "failed" || session?.reviewReason === "error";
+}
+
 function resolvePromptTemplate(action: RuntimeTaskAutoReviewMode, templates: TaskGitPromptTemplates | null): string {
 	if (action === "commit") {
 		const template = templates?.commitPromptTemplate?.trim();
@@ -466,6 +470,13 @@ export function createAutoReviewReconciler(deps: CreateAutoReviewReconcilerDepen
 				}
 				const pendingGitAction = card.pendingGitAction ?? null;
 				const effectiveAgent = card.agentId ?? selectedAgentId;
+				const session = state.sessions[card.id] ?? null;
+				if (isFailedReviewSession(session)) {
+					if (pendingGitAction && stillTracked() && (await clearPendingGitAction(workspacePath, card.id))) {
+						boardMutated = true;
+					}
+					continue;
+				}
 
 				if (pendingGitAction) {
 					if (isPendingGitActionStale(pendingGitAction, timestamp)) {

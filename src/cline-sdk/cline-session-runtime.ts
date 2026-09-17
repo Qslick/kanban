@@ -286,9 +286,14 @@ export class InMemoryClineSessionRuntime implements ClineSessionRuntime {
 		images?: RuntimeTaskImage[];
 		mode?: RuntimeTaskSessionMode;
 	}): Promise<StartClineSessionRuntimeResult> {
-		const lastStartRequest = this.lastStartRequestByTaskId.get(input.taskId);
+		let lastStartRequest = this.lastStartRequestByTaskId.get(input.taskId);
 		if (!lastStartRequest) {
-			throw new Error(`No previous Cline session config is available for task ${input.taskId}.`);
+			const recovered = await this.recoverLastStartRequestFromPersistedSession(input.taskId);
+			if (!recovered) {
+				throw new Error(`No previous Cline session config is available for task ${input.taskId}.`);
+			}
+			lastStartRequest = recovered;
+			this.lastStartRequestByTaskId.set(input.taskId, lastStartRequest);
 		}
 
 		return await this.startTaskSession({
@@ -409,8 +414,10 @@ export class InMemoryClineSessionRuntime implements ClineSessionRuntime {
 		return this.lastStartRequestByTaskId.get(taskId)?.providerId ?? null;
 	}
 
-	canRestartTaskSession(taskId: string): boolean {
-		return this.lastStartRequestByTaskId.has(taskId);
+	canRestartTaskSession(_taskId: string): boolean {
+		// After a process restart the in-memory start config is gone. Restart
+		// recovers it from the persisted session, or throws if none exists.
+		return true;
 	}
 
 	async readPersistedTaskSession(taskId: string): Promise<ClinePersistedTaskSessionSnapshot | null> {
@@ -489,6 +496,32 @@ export class InMemoryClineSessionRuntime implements ClineSessionRuntime {
 		}
 		this.sessionIdByTaskId.delete(taskId);
 		this.taskIdBySessionId.delete(activeSessionId);
+	}
+
+	private async recoverLastStartRequestFromPersistedSession(
+		taskId: string,
+	): Promise<Omit<StartClineSessionRuntimeRequest, "prompt" | "images" | "initialMessages"> | null> {
+		const snapshot = await this.readPersistedTaskSession(taskId);
+		const record = snapshot?.record;
+		if (!record) {
+			return null;
+		}
+		const cwd =
+			(typeof record.cwd === "string" ? record.cwd.trim() : "") ||
+			(typeof record.workspaceRoot === "string" ? record.workspaceRoot.trim() : "");
+		const providerId = typeof record.provider === "string" ? record.provider.trim() : "";
+		const modelId = typeof record.model === "string" ? record.model.trim() : "";
+		if (!cwd || !providerId || !modelId) {
+			return null;
+		}
+		return {
+			taskId,
+			cwd,
+			providerId,
+			modelId,
+			mode: "act",
+			systemPrompt: "",
+		};
 	}
 
 	private async findPersistedTaskSessionRecord(

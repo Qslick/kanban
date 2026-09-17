@@ -523,6 +523,52 @@ describe("InMemoryClineSessionRuntime", () => {
 		);
 	});
 
+	it("recovers restart config from a persisted session after a process restart", async () => {
+		const persisted = createPersistedRecord({
+			sessionId: "task-1-persisted",
+			status: "completed",
+			startedAt: "2026-08-01T00:00:00.000Z",
+			updatedAt: "2026-08-01T00:01:00.000Z",
+		});
+		const fakeHost = {
+			start: vi.fn(async (input: { config?: { sessionId?: string } }) => ({
+				sessionId: input.config?.sessionId ?? "session-2",
+				result: {},
+			})),
+			send: vi.fn(async () => undefined),
+			stop: vi.fn(async () => {}),
+			abort: vi.fn(async () => {}),
+			delete: vi.fn(async () => true),
+			dispose: vi.fn(async () => {}),
+			get: vi.fn(async () => undefined),
+			list: vi.fn(async () => [persisted]),
+			readMessages: vi.fn(async () => []),
+			subscribe: vi.fn(() => () => {}),
+		};
+
+		const runtime = createInMemoryClineSessionRuntime({
+			createSessionHost: async () => fakeHost,
+			createMcpRuntimeService: createNoopMcpRuntimeService,
+		});
+
+		expect(runtime.canRestartTaskSession("task-1")).toBe(true);
+		await runtime.restartTaskSession({
+			taskId: "task-1",
+			prompt: "Continue after crash",
+		});
+
+		expect(fakeHost.start).toHaveBeenCalledTimes(1);
+		expect(fakeHost.start).toHaveBeenCalledWith(
+			expect.objectContaining({
+				config: expect.objectContaining({
+					cwd: "/tmp/worktree",
+					providerId: "anthropic",
+					modelId: "claude-sonnet-4-6",
+				}),
+			}),
+		);
+	});
+
 	it("uses filesystem-safe session ids when task ids include windows-invalid characters", async () => {
 		let requestedSessionId: string | null = null;
 		const fakeHost = {
