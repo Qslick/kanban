@@ -115,7 +115,7 @@ export interface RuntimeUpdateTaskResult {
 export interface RuntimeAddTaskDependencyResult {
 	board: RuntimeBoardData;
 	added: boolean;
-	reason?: "missing_task" | "same_task" | "duplicate" | "trash_task" | "non_backlog";
+	reason?: "missing_task" | "same_task" | "duplicate" | "trash_task" | "non_backlog" | "cycle";
 	dependency?: RuntimeBoardDependency;
 }
 
@@ -158,19 +158,65 @@ function createDependencyId(): string {
 	return crypto.randomUUID().replaceAll("-", "").slice(0, 8);
 }
 
-function createDependencyPairKey(backlogTaskId: string, linkedTaskId: string): string {
-	return `${backlogTaskId}::${linkedTaskId}`;
+/**
+ * Links are identified by the unordered pair of tasks they connect, so `A -> B` and `B -> A`
+ * are the same link. Keeping the key unordered is what makes a reverse link a duplicate
+ * instead of a two-task cycle that blocks both cards forever.
+ */
+function createDependencyPairKey(firstTaskId: string, secondTaskId: string): string {
+	return firstTaskId <= secondTaskId ? `${firstTaskId}::${secondTaskId}` : `${secondTaskId}::${firstTaskId}`;
 }
 
-function hasDependencyPair(board: RuntimeBoardData, backlogTaskId: string, linkedTaskId: string): boolean {
-	const pairKey = createDependencyPairKey(backlogTaskId, linkedTaskId);
+function hasDependencyPair(board: RuntimeBoardData, firstTaskId: string, secondTaskId: string): boolean {
+	const pairKey = createDependencyPairKey(firstTaskId, secondTaskId);
 	for (const dependency of board.dependencies) {
-		const existing = resolveDependencyEndpoints(board, dependency.fromTaskId, dependency.toTaskId);
-		if ("reason" in existing) {
+		if (createDependencyPairKey(dependency.fromTaskId.trim(), dependency.toTaskId.trim()) === pairKey) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * True when making `waitingTaskId` wait on `prerequisiteTaskId` would close a loop, i.e. the
+ * prerequisite already depends (transitively) on the waiting task. A loop leaves every card in
+ * it permanently blocked and impossible to auto-start, so it is refused at creation time.
+ */
+function wouldCreateDependencyCycle(
+	board: RuntimeBoardData,
+	waitingTaskId: string,
+	prerequisiteTaskId: string,
+): boolean {
+	if (board.dependencies.length === 0) {
+		return false;
+	}
+	const prerequisitesByTaskId = new Map<string, string[]>();
+	for (const dependency of board.dependencies) {
+		const fromTaskId = dependency.fromTaskId.trim();
+		const toTaskId = dependency.toTaskId.trim();
+		if (!fromTaskId || !toTaskId) {
 			continue;
 		}
-		if (createDependencyPairKey(existing.backlogTaskId, existing.linkedTaskId) === pairKey) {
+		const existing = prerequisitesByTaskId.get(fromTaskId);
+		if (existing) {
+			existing.push(toTaskId);
+			continue;
+		}
+		prerequisitesByTaskId.set(fromTaskId, [toTaskId]);
+	}
+	const pending = [prerequisiteTaskId];
+	const visited = new Set<string>();
+	while (pending.length > 0) {
+		const taskId = pending.pop();
+		if (!taskId || visited.has(taskId)) {
+			continue;
+		}
+		if (taskId === waitingTaskId) {
 			return true;
+		}
+		visited.add(taskId);
+		for (const nextTaskId of prerequisitesByTaskId.get(taskId) ?? []) {
+			pending.push(nextTaskId);
 		}
 	}
 	return false;
@@ -204,6 +250,11 @@ function findTaskLocation(
 	return null;
 }
 
+/**
+ * Creation-time gate only. Never call this while normalizing a stored board: it rejects pairs
+ * whose endpoints have since left Backlog, and it reorients the pair, so running it over stored
+ * links deletes and inverts them. See `updateTaskDependencies`.
+ */
 function resolveDependencyEndpoints(
 	board: RuntimeBoardData,
 	firstTaskId: string,
@@ -264,6 +315,18 @@ function getLinkedBacklogTaskIdsReadyAfterTaskTrashed(
 	return [...readyTaskIds];
 }
 
+/**
+ * Normalizes stored links. This runs on every board read on both the server
+ * (`readWorkspaceBoard`) and the client (`normalizeBoardData`), and the result is what gets
+ * persisted, so anything dropped here is gone for good and any reorientation here silently
+ * rewrites what the user drew.
+ *
+ * It therefore retires a link only when it can no longer mean anything — an endpoint has left
+ * the board, or an endpoint reached Done, which is the link's normal end of life. It must never
+ * drop a link just because both endpoints left Backlog (both cards are still active work and
+ * the relationship still holds), and it must never change a link's direction. Column rules that
+ * decide whether a link may be *created* belong in `resolveDependencyEndpoints`.
+ */
 export function updateTaskDependencies(board: RuntimeBoardData): RuntimeBoardData {
 	if (board.dependencies.length === 0) {
 		return board;
@@ -272,27 +335,26 @@ export function updateTaskDependencies(board: RuntimeBoardData): RuntimeBoardDat
 	const dependencies: RuntimeBoardDependency[] = [];
 	const existingPairs = new Set<string>();
 	for (const dependency of board.dependencies) {
-		const firstTaskId = dependency.fromTaskId.trim();
-		const secondTaskId = dependency.toTaskId.trim();
-		if (!firstTaskId || !secondTaskId || firstTaskId === secondTaskId) {
+		const fromTaskId = dependency.fromTaskId.trim();
+		const toTaskId = dependency.toTaskId.trim();
+		if (!fromTaskId || !toTaskId || fromTaskId === toTaskId) {
 			continue;
 		}
-		if (!taskIds.has(firstTaskId) || !taskIds.has(secondTaskId)) {
+		if (!taskIds.has(fromTaskId) || !taskIds.has(toTaskId)) {
 			continue;
 		}
-		const resolved = resolveDependencyEndpoints(board, firstTaskId, secondTaskId);
-		if ("reason" in resolved) {
+		if (getTaskColumnId(board, fromTaskId) === "trash" || getTaskColumnId(board, toTaskId) === "trash") {
 			continue;
 		}
-		const pairKey = createDependencyPairKey(resolved.backlogTaskId, resolved.linkedTaskId);
+		const pairKey = createDependencyPairKey(fromTaskId, toTaskId);
 		if (existingPairs.has(pairKey)) {
 			continue;
 		}
 		existingPairs.add(pairKey);
 		dependencies.push({
 			id: dependency.id,
-			fromTaskId: resolved.backlogTaskId,
-			toTaskId: resolved.linkedTaskId,
+			fromTaskId,
+			toTaskId,
 			createdAt: dependency.createdAt,
 		});
 	}
@@ -438,6 +500,9 @@ export function addTaskDependency(
 	if (hasDependencyPair(board, resolved.backlogTaskId, resolved.linkedTaskId)) {
 		return { board, added: false, reason: "duplicate" };
 	}
+	if (wouldCreateDependencyCycle(board, resolved.backlogTaskId, resolved.linkedTaskId)) {
+		return { board, added: false, reason: "cycle" };
+	}
 	const dependency: RuntimeBoardDependency = {
 		id: createDependencyId(),
 		fromTaskId: resolved.backlogTaskId,
@@ -464,7 +529,10 @@ export function canAddTaskDependency(board: RuntimeBoardData, firstTaskId: strin
 	if ("reason" in resolved) {
 		return false;
 	}
-	return !hasDependencyPair(board, resolved.backlogTaskId, resolved.linkedTaskId);
+	if (hasDependencyPair(board, resolved.backlogTaskId, resolved.linkedTaskId)) {
+		return false;
+	}
+	return !wouldCreateDependencyCycle(board, resolved.backlogTaskId, resolved.linkedTaskId);
 }
 
 export function removeTaskDependency(board: RuntimeBoardData, dependencyId: string): RuntimeRemoveTaskDependencyResult {

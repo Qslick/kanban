@@ -103,7 +103,7 @@ describe("board dependency state", () => {
 		expect(sameTask.reason).toBe("same_task");
 	});
 
-	it("preserves backlog-to-backlog link order and reorients it when one task starts", () => {
+	it("keeps a backlog-to-backlog link pointing the way it was drawn when one task starts", () => {
 		const fixture = createBacklogBoard(["Task A", "Task B"]);
 		const taskA = requireTaskId(fixture.taskIdByPrompt["Task A"], "Task A");
 		const taskB = requireTaskId(fixture.taskIdByPrompt["Task B"], "Task B");
@@ -115,17 +115,19 @@ describe("board dependency state", () => {
 			toTaskId: taskB,
 		});
 
+		// Reorienting here would make Task B look blocked by work it never waited on, which
+		// silently hides it from a Ready-now-filtered Backlog.
 		const movedA = moveTaskToColumn(bothBacklog.board, taskA, "in_progress");
 		expect(movedA.moved).toBe(true);
 		expect(movedA.board.dependencies).toEqual([
 			expect.objectContaining({
-				fromTaskId: taskB,
-				toTaskId: taskA,
+				fromTaskId: taskA,
+				toTaskId: taskB,
 			}),
 		]);
 	});
 
-	it("allows backlog-to-backlog links in either direction", () => {
+	it("rejects the reverse of an existing link instead of creating a two-task loop", () => {
 		const fixture = createBacklogBoard(["Task A", "Task B"]);
 		const taskA = requireTaskId(fixture.taskIdByPrompt["Task A"], "Task A");
 		const taskB = requireTaskId(fixture.taskIdByPrompt["Task B"], "Task B");
@@ -133,11 +135,28 @@ describe("board dependency state", () => {
 		const firstDirection = addTaskDependency(fixture.board, taskA, taskB);
 		expect(firstDirection.added).toBe(true);
 		const reverseDirection = addTaskDependency(firstDirection.board, taskB, taskA);
-		expect(reverseDirection.added).toBe(true);
+		expect(reverseDirection.added).toBe(false);
+		expect(reverseDirection.reason).toBe("duplicate");
 		expect(reverseDirection.board.dependencies).toEqual([
 			expect.objectContaining({ fromTaskId: taskA, toTaskId: taskB }),
-			expect.objectContaining({ fromTaskId: taskB, toTaskId: taskA }),
 		]);
+	});
+
+	it("rejects a link that would close a longer dependency loop", () => {
+		const fixture = createBacklogBoard(["Task A", "Task B", "Task C"]);
+		const taskA = requireTaskId(fixture.taskIdByPrompt["Task A"], "Task A");
+		const taskB = requireTaskId(fixture.taskIdByPrompt["Task B"], "Task B");
+		const taskC = requireTaskId(fixture.taskIdByPrompt["Task C"], "Task C");
+
+		const firstLink = addTaskDependency(fixture.board, taskA, taskB);
+		expect(firstLink.added).toBe(true);
+		const secondLink = addTaskDependency(firstLink.board, taskB, taskC);
+		expect(secondLink.added).toBe(true);
+
+		const closingLink = addTaskDependency(secondLink.board, taskC, taskA);
+		expect(closingLink.added).toBe(false);
+		expect(closingLink.reason).toBe("cycle");
+		expect(closingLink.board.dependencies).toHaveLength(2);
 	});
 
 	it("only unlocks backlog cards when a review card is trashed", () => {
@@ -198,7 +217,7 @@ describe("board dependency state", () => {
 		expect(movedBTrash.board.dependencies).toHaveLength(0);
 	});
 
-	it("removes links once neither endpoint remains in backlog", () => {
+	it("keeps a link when both endpoints leave backlog but neither is done", () => {
 		const fixture = createBacklogBoard(["Task A", "Task B"]);
 		const taskA = requireTaskId(fixture.taskIdByPrompt["Task A"], "Task A");
 		const taskB = requireTaskId(fixture.taskIdByPrompt["Task B"], "Task B");
@@ -208,9 +227,14 @@ describe("board dependency state", () => {
 		const linked = addTaskDependency(movedA.board, taskA, taskB);
 		expect(linked.added).toBe(true);
 		expect(linked.board.dependencies).toHaveLength(1);
+		const stored = linked.board.dependencies[0];
 
+		// Both cards are still active work, so the recorded relationship must survive. Dropping
+		// it here used to erode a whole chain of links as tasks were started.
 		const movedB = moveTaskToColumn(linked.board, taskB, "in_progress");
-		expect(movedB.board.dependencies).toHaveLength(0);
+		expect(movedB.board.dependencies).toEqual([
+			expect.objectContaining({ fromTaskId: stored?.fromTaskId, toTaskId: stored?.toTaskId }),
+		]);
 	});
 
 	it("drops links automatically when an unlocked backlog card starts", () => {
@@ -563,7 +587,7 @@ describe("board dependency state", () => {
 		const normalized = normalizeBoardData(rawBoard);
 		expect(normalized).not.toBeNull();
 		expect(normalized?.dependencies.map((dependency) => `${dependency.fromTaskId}->${dependency.toTaskId}`)).toEqual([
-			"b->a",
+			"a->b",
 			"c->a",
 			"b->c",
 		]);

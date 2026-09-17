@@ -4,12 +4,14 @@ import type { RuntimeBoardData } from "../../src/core/api-contract";
 import {
 	addTaskDependency,
 	addTaskToColumn,
+	canAddTaskDependency,
 	deleteTasksFromBoard,
 	getUnfinishedPrerequisiteTaskIds,
 	moveTaskToColumn,
 	recordTaskVerifyResult,
 	trashTaskAndGetReadyLinkedTaskIds,
 	updateTask,
+	updateTaskDependencies,
 } from "../../src/core/task-board-mutations";
 
 function createBoard(): RuntimeBoardData {
@@ -486,5 +488,88 @@ describe("AND dependency auto-start", () => {
 		const trashA = trashTaskAndGetReadyLinkedTaskIds(linked.board, "aaaaa");
 		expect(trashA.moved).toBe(true);
 		expect(trashA.readyTaskIds).toEqual(["ccccc"]);
+	});
+});
+
+describe("dependency link durability", () => {
+	function createLinkedBacklogBoard(): RuntimeBoardData {
+		const createA = addTaskToColumn(
+			createBoard(),
+			"backlog",
+			{ prompt: "Task A", baseRef: "main" },
+			() => "aaaaa111",
+		);
+		const createB = addTaskToColumn(
+			createA.board,
+			"backlog",
+			{ prompt: "Task B", baseRef: "main" },
+			() => "bbbbb111",
+		);
+		const linked = addTaskDependency(createB.board, "aaaaa", "bbbbb");
+		if (!linked.added) {
+			throw new Error("Expected dependency to be created.");
+		}
+		return linked.board;
+	}
+
+	it("keeps a link whose endpoints both left backlog", () => {
+		const board = createLinkedBacklogBoard();
+		const startedA = moveTaskToColumn(board, "aaaaa", "in_progress");
+		const startedB = moveTaskToColumn(startedA.board, "bbbbb", "in_progress");
+
+		// Both cards are active work, so the recorded relationship still holds. Dropping it here
+		// permanently erased whole chains of links as tasks were started.
+		expect(updateTaskDependencies(startedB.board).dependencies).toEqual([
+			expect.objectContaining({ fromTaskId: "aaaaa", toTaskId: "bbbbb" }),
+		]);
+	});
+
+	it("never reorients a stored link when the waiting task starts", () => {
+		const board = createLinkedBacklogBoard();
+		const startedA = moveTaskToColumn(board, "aaaaa", "in_progress");
+
+		expect(updateTaskDependencies(startedA.board).dependencies).toEqual([
+			expect.objectContaining({ fromTaskId: "aaaaa", toTaskId: "bbbbb" }),
+		]);
+		// Task B never waited on anything, so it must not become blocked.
+		expect(getUnfinishedPrerequisiteTaskIds(startedA.board, "bbbbb")).toEqual([]);
+		expect(getUnfinishedPrerequisiteTaskIds(startedA.board, "aaaaa")).toEqual(["bbbbb"]);
+	});
+
+	it("retires a link once an endpoint is done", () => {
+		const board = createLinkedBacklogBoard();
+		const doneB = moveTaskToColumn(board, "bbbbb", "trash");
+
+		expect(updateTaskDependencies(doneB.board).dependencies).toEqual([]);
+	});
+
+	it("drops a link whose endpoint is no longer on the board", () => {
+		const board = createLinkedBacklogBoard();
+		const deleted = deleteTasksFromBoard(board, ["bbbbb"]);
+
+		expect(updateTaskDependencies(deleted.board).dependencies).toEqual([]);
+	});
+
+	it("treats the reverse of an existing link as a duplicate", () => {
+		const board = createLinkedBacklogBoard();
+
+		expect(canAddTaskDependency(board, "bbbbb", "aaaaa")).toBe(false);
+		const reverse = addTaskDependency(board, "bbbbb", "aaaaa");
+		expect(reverse.added).toBe(false);
+		expect(reverse.reason).toBe("duplicate");
+	});
+
+	it("refuses a link that would close a dependency loop", () => {
+		const board = createLinkedBacklogBoard();
+		const createC = addTaskToColumn(board, "backlog", { prompt: "Task C", baseRef: "main" }, () => "ccccc111");
+		const linkBC = addTaskDependency(createC.board, "bbbbb", "ccccc");
+		expect(linkBC.added).toBe(true);
+
+		// A loop leaves every card in it permanently blocked and impossible to auto-start.
+		expect(canAddTaskDependency(linkBC.board, "ccccc", "aaaaa")).toBe(false);
+		const closing = addTaskDependency(linkBC.board, "ccccc", "aaaaa");
+		expect(closing.added).toBe(false);
+		expect(closing.reason).toBe("cycle");
+		expect(closing.board.dependencies).toHaveLength(2);
 	});
 });

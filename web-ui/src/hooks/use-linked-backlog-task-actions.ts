@@ -73,7 +73,9 @@ export function useLinkedBacklogTaskActions({
 								? "Links cannot include done tasks."
 								: result.reason === "non_backlog"
 									? "Links must include at least one Backlog task."
-									: "Could not create link.";
+									: result.reason === "cycle"
+										? "That link would create a dependency loop."
+										: "Could not create link.";
 				showAppToast({
 					intent: "warning",
 					icon: "warning-sign",
