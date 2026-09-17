@@ -17,7 +17,10 @@ import { useDependencyLinking } from "@/components/dependencies/use-dependency-l
 import type { RuntimeTaskSessionSummary } from "@/runtime/types";
 import { canCreateTaskDependency } from "@/state/board-state";
 import { findCardColumnId, type ProgrammaticCardMoveInFlight } from "@/state/drag-rules";
+import { isTaskReadyNow, remapBacklogDragSourceIndex } from "@/state/ready-now";
+import { LocalStorageKey } from "@/storage/local-storage-store";
 import type { BoardCard, BoardColumnId, BoardData, BoardDependency } from "@/types";
+import { useBooleanLocalStorageValue } from "@/utils/react-use";
 
 const BOARD_COLUMN_ORDER: BoardColumnId[] = ["backlog", "in_progress", "review", "trash"];
 
@@ -88,6 +91,7 @@ export function KanbanBoard({
 	const latestDataRef = useRef<BoardData>(data);
 	const programmaticCardMoveInFlightRef = useRef<ProgrammaticCardMoveInFlight | null>(null);
 	const [activeDragTaskId, setActiveDragTaskId] = useState<string | null>(null);
+	const [readyNowFilter, setReadyNowFilter] = useBooleanLocalStorageValue(LocalStorageKey.ReadyNowFilter, false);
 
 	const [activeDragSourceColumnId, setActiveDragSourceColumnId] = useState<BoardColumnId | null>(null);
 	const [programmaticCardMoveInFlight, setProgrammaticCardMoveInFlight] =
@@ -356,9 +360,25 @@ export function KanbanBoard({
 			requestAnimationFrame(() => {
 				dragOccurredRef.current = false;
 			});
+			// Hidden cards are omitted from the droppable, so remap onto the full backlog order.
+			if (readyNowFilter && result.source.droppableId === "backlog") {
+				const remappedIndex = remapBacklogDragSourceIndex(
+					latestDataRef.current,
+					result.draggableId,
+					result.source.index,
+				);
+				onDragEnd({
+					...result,
+					source: {
+						...result.source,
+						index: remappedIndex,
+					},
+				});
+				return;
+			}
 			onDragEnd(result);
 		},
-		[clearProgrammaticCardMoveInFlight, onDragEnd],
+		[clearProgrammaticCardMoveInFlight, onDragEnd, readyNowFilter],
 	);
 
 	// Dependency links should reroute as soon as motion starts, not only after drop.
@@ -411,6 +431,11 @@ export function KanbanBoard({
 						isDependencyLinking={dependencyLinking.draft !== null}
 						workspacePath={workspacePath}
 						defaultClineModelId={defaultClineModelId}
+						readyNowFilter={column.id === "backlog" ? readyNowFilter : undefined}
+						onToggleReadyNowFilter={
+							column.id === "backlog" ? () => setReadyNowFilter((current) => !current) : undefined
+						}
+						isCardReadyNow={column.id === "backlog" ? (taskId) => isTaskReadyNow(data, taskId) : undefined}
 						onCardClick={(card) => {
 							if (!dragOccurredRef.current) {
 								onCardSelect(card.id);

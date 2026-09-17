@@ -5,6 +5,7 @@ import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { BoardCard } from "@/components/board-card";
 import { Button } from "@/components/ui/button";
 import { ColumnIndicator } from "@/components/ui/column-indicator";
+import { Tooltip } from "@/components/ui/tooltip";
 import type { RuntimeTaskSessionSummary } from "@/runtime/types";
 import { isCardDropDisabled, type ProgrammaticCardMoveInFlight } from "@/state/drag-rules";
 import type { BoardCard as BoardCardModel, BoardColumnId, BoardColumn as BoardColumnModel } from "@/types";
@@ -39,6 +40,9 @@ export function BoardColumn({
 	isDependencyLinking,
 	workspacePath,
 	defaultClineModelId,
+	readyNowFilter,
+	onToggleReadyNowFilter,
+	isCardReadyNow,
 }: {
 	column: BoardColumnModel;
 	taskSessions: Record<string, RuntimeTaskSessionSummary>;
@@ -69,15 +73,22 @@ export function BoardColumn({
 	isDependencyLinking?: boolean;
 	workspacePath?: string | null;
 	defaultClineModelId?: string | null;
+	readyNowFilter?: boolean;
+	onToggleReadyNowFilter?: () => void;
+	isCardReadyNow?: (taskId: string) => boolean;
 }): React.ReactElement {
 	const canCreate = column.id === "backlog" && onCreateTask;
 	const canStartAllTasks = column.id === "backlog" && onStartAllTasks;
 	const canClearTrash = column.id === "trash" && onClearTrash;
+	const canToggleReadyNow = column.id === "backlog" && Boolean(onToggleReadyNowFilter);
+	const visibleCards =
+		readyNowFilter && isCardReadyNow ? column.cards.filter((card) => isCardReadyNow(card.id)) : column.cards;
 	const cardDropType = "CARD";
-	const isDropDisabled = isCardDropDisabled(column.id, activeDragSourceColumnId ?? null, {
-		activeDragTaskId,
-		programmaticCardMoveInFlight,
-	});
+	const isDropDisabled =
+		isCardDropDisabled(column.id, activeDragSourceColumnId ?? null, {
+			activeDragTaskId,
+			programmaticCardMoveInFlight,
+		}) || Boolean(readyNowFilter && column.id === "backlog");
 	const createTaskButtonText = (
 		<span className="inline-flex items-center gap-1.5">
 			<span>Create task</span>
@@ -103,21 +114,38 @@ export function BoardColumn({
 						padding: "0 12px",
 					}}
 				>
-					<div className="flex items-center gap-2">
+					<div className="flex items-center gap-2 min-w-0">
 						<ColumnIndicator columnId={column.id} />
 						<span className="font-semibold text-sm">{column.title}</span>
-						<span className="text-text-secondary text-xs">{column.cards.length}</span>
+						<span className="text-text-secondary text-xs">{visibleCards.length}</span>
 					</div>
-					{canStartAllTasks ? (
-						<Button
-							icon={<Play size={14} />}
-							variant="ghost"
-							size="sm"
-							onClick={onStartAllTasks}
-							disabled={column.cards.length === 0}
-							aria-label="Start all backlog tasks"
-							title={column.cards.length > 0 ? "Start all backlog tasks" : "Backlog is empty"}
-						/>
+					{canToggleReadyNow || canStartAllTasks ? (
+						<div className="flex items-center gap-0.5 shrink-0">
+							{canToggleReadyNow ? (
+								<Tooltip content="Show cards with no unfinished prerequisites">
+									<Button
+										variant={readyNowFilter ? "primary" : "ghost"}
+										size="sm"
+										aria-pressed={readyNowFilter}
+										aria-label="Ready now"
+										onClick={onToggleReadyNowFilter}
+									>
+										Ready now
+									</Button>
+								</Tooltip>
+							) : null}
+							{canStartAllTasks ? (
+								<Button
+									icon={<Play size={14} />}
+									variant="ghost"
+									size="sm"
+									onClick={onStartAllTasks}
+									disabled={column.cards.length === 0}
+									aria-label="Start all backlog tasks"
+									title={column.cards.length > 0 ? "Start all backlog tasks" : "Backlog is empty"}
+								/>
+							) : null}
+						</div>
 					) : null}
 					{canClearTrash ? (
 						<Button
@@ -148,10 +176,14 @@ export function BoardColumn({
 								</Button>
 							) : null}
 
+							{readyNowFilter && visibleCards.length === 0 ? (
+								<p className="text-text-secondary text-xs px-0.5 py-2 m-0">No ready cards</p>
+							) : null}
+
 							{(() => {
 								const items: ReactNode[] = [];
 								let draggableIndex = 0;
-								for (const card of column.cards) {
+								for (const card of visibleCards) {
 									if (column.id === "backlog" && editingTaskId === card.id) {
 										items.push(
 											<div
