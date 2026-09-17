@@ -4,7 +4,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { KanbanBoard, type RequestProgrammaticCardMove } from "@/components/kanban-board";
-import type { BoardData } from "@/types";
+import { LocalStorageKey } from "@/storage/local-storage-store";
+import type { BoardCard, BoardData } from "@/types";
 
 const dndMock = vi.hoisted(() => ({
 	sensorApi: null as {
@@ -38,15 +39,40 @@ vi.mock("@hello-pangea/dnd", async () => {
 });
 
 vi.mock("@/components/board-column", () => ({
-	BoardColumn: ({ column }: { column: BoardData["columns"][number] }): React.ReactElement => (
-		<section data-column-id={column.id}>
-			<div className="kb-column-cards">
-				{column.cards.map((card) => (
-					<div key={card.id} data-task-id={card.id} />
-				))}
-			</div>
-		</section>
-	),
+	BoardColumn: ({
+		column,
+		readyNowFilter,
+		onToggleReadyNowFilter,
+		isCardReadyNow,
+	}: {
+		column: BoardData["columns"][number];
+		readyNowFilter?: boolean;
+		onToggleReadyNowFilter?: () => void;
+		isCardReadyNow?: (taskId: string) => boolean;
+	}): React.ReactElement => {
+		const visibleCards =
+			readyNowFilter && isCardReadyNow ? column.cards.filter((card) => isCardReadyNow(card.id)) : column.cards;
+		return (
+			<section data-column-id={column.id}>
+				{onToggleReadyNowFilter ? (
+					<button
+						type="button"
+						aria-label="Ready now"
+						aria-pressed={readyNowFilter ? "true" : "false"}
+						onClick={onToggleReadyNowFilter}
+					>
+						Ready now
+					</button>
+				) : null}
+				{readyNowFilter && visibleCards.length === 0 ? <p>No ready cards</p> : null}
+				<div className="kb-column-cards">
+					{visibleCards.map((card) => (
+						<div key={card.id} data-task-id={card.id} />
+					))}
+				</div>
+			</section>
+		);
+	},
 }));
 
 vi.mock("@/components/dependencies/dependency-overlay", () => ({
@@ -81,6 +107,7 @@ describe("KanbanBoard", () => {
 	let previousActEnvironment: boolean | undefined;
 
 	beforeEach(() => {
+		window.localStorage.clear();
 		vi.useFakeTimers();
 		vi.spyOn(performance, "now").mockImplementation(() => Date.now());
 		vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback: FrameRequestCallback) => {
@@ -224,5 +251,63 @@ describe("KanbanBoard", () => {
 		});
 
 		expect(boardElement?.dataset.programmaticCardMove).toBe("true");
+	});
+
+	it("persists the ready now filter and hides blocked backlog cards", async () => {
+		function createCard(id: string): BoardCard {
+			return {
+				id,
+				title: id,
+				prompt: id,
+				startInPlanMode: false,
+				autoReviewEnabled: false,
+				autoReviewMode: "commit",
+				baseRef: "main",
+				createdAt: 1,
+				updatedAt: 1,
+			};
+		}
+
+		const board: BoardData = {
+			columns: [
+				{
+					id: "backlog",
+					title: "Backlog",
+					cards: [createCard("ready-task"), createCard("blocked-task")],
+				},
+				{ id: "in_progress", title: "In Progress", cards: [] },
+				{ id: "review", title: "Review", cards: [createCard("prereq-task")] },
+				{ id: "trash", title: "Done", cards: [] },
+			],
+			dependencies: [{ id: "dep-1", fromTaskId: "blocked-task", toTaskId: "prereq-task", createdAt: 1 }],
+		};
+
+		await act(async () => {
+			root.render(
+				<KanbanBoard
+					data={board}
+					taskSessions={{}}
+					onCardSelect={() => {}}
+					onCreateTask={() => {}}
+					dependencies={board.dependencies}
+					onDragEnd={() => {}}
+				/>,
+			);
+		});
+
+		expect(container.querySelector('[data-task-id="ready-task"]')).not.toBeNull();
+		expect(container.querySelector('[data-task-id="blocked-task"]')).not.toBeNull();
+
+		const toggle = container.querySelector<HTMLButtonElement>('button[aria-label="Ready now"]');
+		expect(toggle?.getAttribute("aria-pressed")).toBe("false");
+
+		await act(async () => {
+			toggle?.click();
+		});
+
+		expect(toggle?.getAttribute("aria-pressed")).toBe("true");
+		expect(window.localStorage.getItem(LocalStorageKey.ReadyNowFilter)).toBe("true");
+		expect(container.querySelector('[data-task-id="ready-task"]')).not.toBeNull();
+		expect(container.querySelector('[data-task-id="blocked-task"]')).toBeNull();
 	});
 });
