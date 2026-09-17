@@ -2,8 +2,8 @@ import { isPendingGitActionStale, PENDING_GIT_ACTION_STALE_AFTER_MS } from "@run
 import type {
 	RuntimeAgentId,
 	RuntimeBoardColumnId,
+	RuntimeTaskAgentSettings,
 	RuntimeTaskAutoReviewMode,
-	RuntimeTaskClineSettings,
 	RuntimeTaskImage,
 	RuntimeTaskPendingGitAction,
 } from "@/runtime/types";
@@ -50,7 +50,7 @@ export interface BoardCard {
 	autoReviewMode?: TaskAutoReviewMode;
 	images?: TaskImage[];
 	agentId?: RuntimeAgentId;
-	clineSettings?: RuntimeTaskClineSettings;
+	agentSettings?: RuntimeTaskAgentSettings;
 	baseRef: string;
 	createdAt: number;
 	updatedAt: number;
