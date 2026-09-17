@@ -5,6 +5,7 @@ import {
 	addTaskDependency,
 	addTaskToColumn,
 	deleteTasksFromBoard,
+	getUnfinishedPrerequisiteTaskIds,
 	moveTaskToColumn,
 	trashTaskAndGetReadyLinkedTaskIds,
 	updateTask,
@@ -289,13 +290,17 @@ describe("AND dependency auto-start", () => {
 			throw new Error("Expected both dependencies to be created.");
 		}
 
+		expect(getUnfinishedPrerequisiteTaskIds(linkB.board, "ccccc")).toEqual(["aaaaa", "bbbbb"]);
+
 		const trashA = trashTaskAndGetReadyLinkedTaskIds(linkB.board, "aaaaa");
 		expect(trashA.moved).toBe(true);
 		expect(trashA.readyTaskIds).toEqual([]);
+		expect(getUnfinishedPrerequisiteTaskIds(trashA.board, "ccccc")).toEqual(["bbbbb"]);
 
 		const trashB = trashTaskAndGetReadyLinkedTaskIds(trashA.board, "bbbbb");
 		expect(trashB.moved).toBe(true);
 		expect(trashB.readyTaskIds).toEqual(["ccccc"]);
+		expect(getUnfinishedPrerequisiteTaskIds(trashB.board, "ccccc")).toEqual([]);
 	});
 
 	it("still unlocks a backlog card that has a single review prerequisite", () => {

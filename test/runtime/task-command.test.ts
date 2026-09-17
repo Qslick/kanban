@@ -2,16 +2,29 @@ import { Command } from "commander";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+	addTaskDependencies,
 	buildTaskAgentSettingsForCreate,
 	buildTaskAgentSettingsForUpdate,
 	formatAgentIdOptionHelp,
 	formatTaskAgentSettings,
+	parseTaskIdList,
 	registerTaskCommand,
 	resolveSettingsFlag,
+	resolveTaskLinkBlockerIds,
 	shouldWarnOnExplicitAgentId,
 	warnOnAgentSettingsMechanismGaps,
 } from "../../src/commands/task";
-import { type RuntimeTaskAgentSettings, runtimeAgentIdSchema } from "../../src/core/api-contract";
+import {
+	type RuntimeBoardData,
+	type RuntimeTaskAgentSettings,
+	runtimeAgentIdSchema,
+} from "../../src/core/api-contract";
+import {
+	addTaskToColumn,
+	getUnfinishedPrerequisiteTaskIds,
+	moveTaskToColumn,
+	trashTaskAndGetReadyLinkedTaskIds,
+} from "../../src/core/task-board-mutations";
 
 describe("buildTaskAgentSettingsForCreate", () => {
 	it("returns undefined when no settings fields are provided", () => {
@@ -234,5 +247,125 @@ describe("registerTaskCommand agent-id help", () => {
 		expect(updateHelp).toBe(formatAgentIdOptionHelp("update"));
 		expect(createHelp).toContain("grok");
 		expect(updateHelp).toContain("grok");
+	});
+});
+
+function createBoard(): RuntimeBoardData {
+	return {
+		columns: [
+			{ id: "backlog", title: "Backlog", cards: [] },
+			{ id: "in_progress", title: "In Progress", cards: [] },
+			{ id: "review", title: "Review", cards: [] },
+			{ id: "trash", title: "Done", cards: [] },
+		],
+		dependencies: [],
+	};
+}
+
+function createLinkedBacklogCard() {
+	const createA = addTaskToColumn(createBoard(), "review", { prompt: "Task A", baseRef: "main" }, () => "aaaaa111");
+	const createB = addTaskToColumn(createA.board, "review", { prompt: "Task B", baseRef: "main" }, () => "bbbbb111");
+	const createC = addTaskToColumn(createB.board, "backlog", { prompt: "Task C", baseRef: "main" }, () => "ccccc111");
+	return createC.board;
+}
+
+describe("parseTaskIdList", () => {
+	it("splits comma-separated IDs and trims whitespace", () => {
+		expect(parseTaskIdList("aaaaa, bbbbb")).toEqual(["aaaaa", "bbbbb"]);
+	});
+
+	it("dedupes IDs in a single flag value", () => {
+		expect(parseTaskIdList("aaaaa,aaaaa,bbbbb")).toEqual(["aaaaa", "bbbbb"]);
+	});
+
+	it("rejects an empty flag value", () => {
+		expect(() => parseTaskIdList(" , ")).toThrow('Invalid --blocked-by value " , ". Expected one or more task IDs.');
+	});
+});
+
+describe("resolveTaskLinkBlockerIds", () => {
+	it("keeps --linked-task-id as the single-blocker form", () => {
+		expect(resolveTaskLinkBlockerIds({ linkedTaskId: "aaaaa" })).toEqual(["aaaaa"]);
+	});
+
+	it("accepts comma-separated --blocked-by IDs", () => {
+		expect(resolveTaskLinkBlockerIds({ blockedBy: "aaaaa,bbbbb" })).toEqual(["aaaaa", "bbbbb"]);
+	});
+
+	it("accepts repeated --blocked-by values", () => {
+		expect(resolveTaskLinkBlockerIds({ blockedBy: ["aaaaa", "bbbbb"] })).toEqual(["aaaaa", "bbbbb"]);
+	});
+
+	it("accepts mixed --blocked-by and --linked-task-id without duplicating", () => {
+		expect(
+			resolveTaskLinkBlockerIds({
+				blockedBy: ["aaaaa,bbbbb"],
+				linkedTaskId: "aaaaa",
+			}),
+		).toEqual(["aaaaa", "bbbbb"]);
+	});
+
+	it("requires at least one blocker flag", () => {
+		expect(() => resolveTaskLinkBlockerIds({})).toThrow("task link requires --linked-task-id or --blocked-by.");
+		expect(() => resolveTaskLinkBlockerIds({ blockedBy: [] })).toThrow(
+			"task link requires --linked-task-id or --blocked-by.",
+		);
+	});
+
+	it("rejects a blank --linked-task-id", () => {
+		expect(() => resolveTaskLinkBlockerIds({ linkedTaskId: "  " })).toThrow(
+			'Invalid --linked-task-id value "  ". Expected a task ID.',
+		);
+	});
+});
+
+describe("AND task link CLI helpers", () => {
+	it("links two blockers and does not ready C until both review prerequisites are done", () => {
+		const board = createLinkedBacklogCard();
+		const blockerIds = resolveTaskLinkBlockerIds({ blockedBy: "aaaaa,bbbbb" });
+		const linked = addTaskDependencies(board, "ccccc", blockerIds);
+
+		expect(linked.dependencies).toHaveLength(2);
+		expect(linked.dependencies.map((dependency) => dependency.toTaskId)).toEqual(["aaaaa", "bbbbb"]);
+		expect(getUnfinishedPrerequisiteTaskIds(linked.board, "ccccc")).toEqual(["aaaaa", "bbbbb"]);
+
+		const trashA = trashTaskAndGetReadyLinkedTaskIds(linked.board, "aaaaa");
+		expect(trashA.readyTaskIds).toEqual([]);
+		expect(getUnfinishedPrerequisiteTaskIds(trashA.board, "ccccc")).toEqual(["bbbbb"]);
+
+		const trashB = trashTaskAndGetReadyLinkedTaskIds(trashA.board, "bbbbb");
+		expect(trashB.readyTaskIds).toEqual(["ccccc"]);
+		expect(getUnfinishedPrerequisiteTaskIds(trashB.board, "ccccc")).toEqual([]);
+	});
+
+	it("still links a single --linked-task-id blocker", () => {
+		const board = createLinkedBacklogCard();
+		const blockerIds = resolveTaskLinkBlockerIds({ linkedTaskId: "aaaaa" });
+		const linked = addTaskDependencies(board, "ccccc", blockerIds);
+
+		expect(linked.dependencies).toHaveLength(1);
+		expect(linked.dependencies[0]?.toTaskId).toBe("aaaaa");
+		expect(getUnfinishedPrerequisiteTaskIds(linked.board, "ccccc")).toEqual(["aaaaa"]);
+
+		const trashA = trashTaskAndGetReadyLinkedTaskIds(linked.board, "aaaaa");
+		expect(trashA.readyTaskIds).toEqual(["ccccc"]);
+	});
+
+	it("rejects invalid blocker IDs without returning a board", () => {
+		const board = createLinkedBacklogCard();
+		const blockerIds = resolveTaskLinkBlockerIds({ blockedBy: "aaaaa,nope" });
+		expect(() => addTaskDependencies(board, "ccccc", blockerIds)).toThrow("One or more tasks could not be found.");
+		expect(board.dependencies).toEqual([]);
+	});
+
+	it("rejects linking a task to itself", () => {
+		const board = createLinkedBacklogCard();
+		expect(() => addTaskDependencies(board, "ccccc", ["ccccc"])).toThrow("A task cannot be linked to itself.");
+	});
+
+	it("rejects a blocker that is already done", () => {
+		const board = createLinkedBacklogCard();
+		const trashedA = moveTaskToColumn(board, "aaaaa", "trash");
+		expect(() => addTaskDependencies(trashedA.board, "ccccc", ["aaaaa"])).toThrow("Links cannot include done tasks.");
 	});
 });

@@ -145,8 +145,8 @@ NEVER edit, create, delete, or modify any files in the workspace. NEVER write co
 If the user asks you to write code, fix a bug, implement a feature, refactor, or do any hands-on development work, do NOT attempt it. Instead, help them by creating tasks on the Kanban board so a dedicated coding agent can do that work in its own worktree. Always redirect implementation requests to task creation.
 
 - If the user asks to add tasks to kb, ask kb, kanban, or says add tasks without other context, they likely want to add tasks in Kanban. This includes phrases like "create tasks", "make 3 tasks", "add a task", "break down into tasks", "split into tasks", "decompose into tasks", and "turn into tasks".
-- Kanban also supports linking tasks. Linking is useful both for parallelization and for dependencies: when work is easy to decompose into multiple pieces that can be done in parallel, link multiple backlog tasks to the same dependency so they all become ready to start once that dependency finishes; when one piece of work depends on another, use links to represent that follow-on dependency. If both linked tasks are in backlog, Kanban preserves the order you pass to the command: \`--task-id\` waits on \`--linked-task-id\`, and on the board the arrow points into \`--linked-task-id\`. Once only one linked task remains in backlog, Kanban reorients the saved dependency so the backlog task is the waiting dependent task and the other task is the prerequisite. The board arrow points into the prerequisite task so the user can see what must finish first. A link requires at least one backlog task, and when the linked review task is moved to done, that backlog task becomes ready to start.
-- How linking works: when a task in the review column is moved to done, any linked backlog tasks automatically start. This is how you chain work so tasks kick off autonomously without manual intervention.
+- Kanban also supports linking tasks. Linking is useful both for parallelization and for dependencies: when work is easy to decompose into multiple pieces that can be done in parallel, link multiple backlog tasks to the same dependency so they all become ready to start once that dependency finishes; when one piece of work depends on another, use links to represent that follow-on dependency. \`--task-id\` waits on the blockers. To wait on multiple blockers at once, use \`--blocked-by A,B\` (repeatable). The single-link form \`--linked-task-id\` still works. If both linked tasks are in backlog, Kanban preserves the order you pass to the command: \`--task-id\` waits on each blocker, and on the board the arrow points into the blocker. Once only one linked task remains in backlog, Kanban reorients the saved dependency so the backlog task is the waiting dependent task and the other task is the prerequisite. The board arrow points into the prerequisite task so the user can see what must finish first. A link requires at least one backlog task. Multiple blockers are AND: a waiting backlog task becomes ready only after every linked review prerequisite is moved to done.
+- How linking works: when a review task is moved to done, linked backlog tasks auto-start only if every remaining prerequisite is also done. This is how you chain work so tasks kick off autonomously without manual intervention.
 - Tasks can also enable automatic review actions: auto-commit or auto-open-pr once completed, which then moves the task to done and kicks off any linked tasks. Combining auto-review with linking is how you can set up fully autonomous pipelines when the user wants it. For example, enabling auto-commit on each task in a chain: task A finishes, auto-commits and is moved to done, task B auto-starts from backlog, auto-commits and is moved to done, task C auto-starts, and so on.
 - If your current working directory is inside \`.cline/worktrees/\`, you are inside a Kanban task worktree. In that case, create or manage tasks against the main workspace path, not the task worktree path. Pass the main workspace with \`--project-path\`.
 - If a task command fails because the runtime is unavailable, tell the user to start Kanban in that workspace first with \`${kanbanCommand}\`, then retry the task command.
@@ -182,7 +182,7 @@ All commands return JSON.
 
 ## task list
 
-Purpose: list Kanban tasks for a workspace, including auto-review settings and dependency links.
+Purpose: list Kanban tasks for a workspace, including auto-review settings, dependency links, and remaining unfinished prerequisites on waiting cards.
 
 Command:
 \`${kanbanCommand} task list [--project-path <path>] [--column backlog|in_progress|review|done]\`
@@ -190,6 +190,19 @@ Command:
 Parameters:
 - \`--project-path <path>\` optional workspace path. If omitted, uses the current working directory workspace.
 - \`--column <value>\` optional filter. Allowed values: \`backlog\`, \`in_progress\`, \`review\`, \`done\` (\`trash\` is also accepted).
+
+Each task includes \`unfinishedPrerequisites\`: remaining blockers that are not yet Done.
+
+## task show
+
+Purpose: show one Kanban task, including remaining unfinished prerequisites.
+
+Command:
+\`${kanbanCommand} task show --task-id <task_id> [--project-path <path>]\`
+
+Parameters:
+- \`--task-id <task_id>\` required task ID.
+- \`--project-path <path>\` optional workspace path. If omitted, uses the current working directory workspace.
 
 ## task create
 
@@ -284,21 +297,24 @@ Notes:
 
 ## task link
 
-Purpose: link two tasks so one task waits on another. At least one linked task must be in backlog.
+Purpose: link a task so it waits on one or more blockers. At least one linked task must be in backlog.
 
 Command:
-\`${kanbanCommand} task link --task-id <task_id> --linked-task-id <task_id> [--project-path <path>]\`
+\`${kanbanCommand} task link --task-id <task_id> (--blocked-by <task_ids> | --linked-task-id <task_id>) [--project-path <path>]\`
 
 Parameters:
-- \`--task-id <task_id>\` required one of the two task IDs to link.
-- \`--linked-task-id <task_id>\` required the other task ID to link.
+- \`--task-id <task_id>\` required waiting task ID. This task waits on the blockers.
+- \`--blocked-by <task_ids>\` comma-separated blocker task IDs. Repeatable. Prefer this for multiple blockers.
+- \`--linked-task-id <task_id>\` optional single blocker task ID (legacy single-link).
 - \`--project-path <path>\` optional workspace path. If not already registered in Kanban, it is auto-added for git repos.
 
 Notes:
-- If both linked tasks are in backlog, Kanban preserves the order you pass: \`--task-id\` waits on \`--linked-task-id\`.
+- Provide \`--blocked-by\` and/or \`--linked-task-id\`.
+- If both linked tasks are in backlog, Kanban preserves the order you pass: \`--task-id\` waits on each blocker.
 - On the board, the dependency arrow points into the task that must finish first.
+- Multiple blockers are AND: the waiting backlog task auto-starts only after every linked review prerequisite is moved to done.
 - Once only one linked task remains in backlog, Kanban reorients the saved dependency so the backlog task is the waiting dependent task and the other task is the prerequisite.
-- When the prerequisite task finishes review and is moved to done, the waiting backlog task auto-starts.
+- Inspect remaining blockers with \`task show --task-id <task_id>\` or \`task list\` (\`unfinishedPrerequisites\`).
 
 ## task unlink
 
@@ -363,7 +379,7 @@ Notes:
 # Workflow Notes
 
 - Prefer \`task list\` first when task IDs or dependency IDs are needed.
-- To create multiple linked tasks, create tasks first, then call \`task link\` for each dependency edge.
+- To wait on multiple blockers, create the tasks first, then call \`task link --task-id C --blocked-by A,B\`. You can still call \`task link\` once per edge.
 `;
 }
 
